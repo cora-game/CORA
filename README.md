@@ -4,6 +4,12 @@
 
 <img src="docs/assets/header.png" alt="CORA" width="560">
 
+<p>
+  <a href="https://orynth.dev/projects/cora" target="_blank" rel="noopener">
+    <img src="https://orynth.dev/api/badge/cora?theme=dark&style=minimal" alt="Featured on Orynth" width="152" height="48" />
+  </a>
+</p>
+
 <h3 align="center">Wager your mind. Settle on-chain.</h3>
 
 <p align="center">

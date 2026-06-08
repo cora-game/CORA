@@ -27,6 +27,20 @@ export function Footer() {
           <p className="font-gabarito mt-2 text-sm text-[var(--color-muted)]">
             © 2026 Cora. Cognitive arena.
           </p>
+          <a
+            href="https://orynth.dev/projects/cora"
+            target="_blank"
+            rel="noopener"
+            className="mt-3 inline-block"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="https://orynth.dev/api/badge/cora?theme=dark&style=minimal"
+              alt="Featured on Orynth"
+              width={152}
+              height={48}
+            />
+          </a>
         </div>
 
         <div className="font-gabarito flex flex-wrap items-center gap-6 text-sm font-bold text-[var(--color-muted)]">
