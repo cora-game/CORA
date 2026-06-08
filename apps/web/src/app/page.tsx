@@ -4,6 +4,7 @@ import { Navbar } from "../components/landing/Navbar";
 import { Hero } from "../components/landing/Hero";
 import { TokenMarquee } from "../components/landing/TokenMarquee";
 import { HowItWorks } from "../components/landing/HowItWorks";
+import { Roadmap } from "../components/landing/Roadmap";
 import { Features } from "../components/landing/Features";
 import { VideoSlot } from "../components/landing/VideoSlot";
 import { CtaBanner } from "../components/landing/CtaBanner";
@@ -80,6 +81,7 @@ export default function Home() {
             <TokenMarquee />
             <Features />
             <HowItWorks />
+            <Roadmap />
             <VideoSlot />
             <CtaBanner />
           </main>
