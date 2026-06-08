@@ -14,6 +14,7 @@ type BlinkChallengePanelProps = {
   notificationPermission?: NotificationPermission | "unsupported";
   notice?: { text: string; tone: "success" | "error" } | null;
   canClear?: boolean;
+  clearLabel?: string;
   onEnableNotifications?: () => void;
   onClose: () => void;
   onClear: () => void;
@@ -45,6 +46,7 @@ export function BlinkChallengePanel({
   notificationPermission = "unsupported",
   notice,
   canClear = false,
+  clearLabel = "Clear",
   onEnableNotifications,
   onClose,
   onClear,
@@ -133,7 +135,7 @@ export function BlinkChallengePanel({
           </button>
           {canClear && (
             <button type="button" onClick={onClear} className="btn-game btn-game-secondary px-3 py-1.5 text-[10px]">
-              Clear
+              {clearLabel}
             </button>
           )}
         </div>

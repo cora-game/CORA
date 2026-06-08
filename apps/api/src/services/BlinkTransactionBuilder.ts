@@ -8,9 +8,9 @@ import {
 } from '@solana/web3.js';
 import { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction, createSyncNativeInstruction, NATIVE_MINT } from '@solana/spl-token';
 import { ESCROW_CONSTANTS } from '@shared/escrow';
-import bs58 from 'bs58';
 import type { Room } from '../managers/room/types';
 import { CORA_ESCROW_PROGRAM_ID, ESCROW_INSTRUCTION_DISCRIMINATORS } from '../config/solana';
+import { serverPublicKey as SERVER_PUBLIC_KEY } from '../utils/settlement';
 import { DEVNET_TOKEN_MINTS, resolveTokenMint } from '../config/tokens';
 
 export { resolveTokenMint };
@@ -107,12 +107,9 @@ export class BlinkTransactionBuilder {
 
     // Build create_open_challenge instruction data
     // Layout: 8 (discriminator) + 32 (match_id) + 8 (wager_amount) + 32 (server_pubkey) = 80 bytes
-    const privateKey = process.env.SERVER_KEYPAIR;
-    if (!privateKey) throw new Error("Missing SERVER_KEYPAIR for backend");
-    const serverKeypair = privateKey.trimStart().startsWith('[')
-      ? new Uint8Array(JSON.parse(privateKey))
-      : bs58.decode(privateKey);
-    const serverPubkey = new PublicKey(serverKeypair.subarray(32, 64));
+    // Use the shared server public key (ephemeral fallback for local dev) so the
+    // embedded pubkey always matches the one used at settlement time.
+    const serverPubkey = new PublicKey(SERVER_PUBLIC_KEY);
 
     const wagerAmountBuffer = Buffer.alloc(8);
     wagerAmountBuffer.writeBigUInt64LE(BigInt(wagerAmount));
@@ -301,12 +298,9 @@ export class BlinkTransactionBuilder {
     }
 
     if (initializeMatch) {
-      const privateKey = process.env.SERVER_KEYPAIR;
-      if (!privateKey) throw new Error("Missing SERVER_KEYPAIR for backend");
-      const serverKeypair = privateKey.trimStart().startsWith('[')
-        ? new Uint8Array(JSON.parse(privateKey))
-        : bs58.decode(privateKey);
-      const serverPubkey = new PublicKey(serverKeypair.subarray(32, 64));
+      // Use the shared server public key (ephemeral fallback for local dev) so the
+      // embedded pubkey always matches the one used at settlement time.
+      const serverPubkey = new PublicKey(SERVER_PUBLIC_KEY);
 
       const wagerAmountBuffer = Buffer.alloc(8);
       wagerAmountBuffer.writeBigUInt64LE(BigInt(wagerAmount));

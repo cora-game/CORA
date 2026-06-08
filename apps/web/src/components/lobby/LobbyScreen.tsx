@@ -133,6 +133,16 @@ const PHASE_VARIANTS = {
 };
 
 const BLINK_TERMINAL_STATUSES = new Set<PrivateChallengeStatus>(["EXPIRED", "FORFEITED", "COMPLETED"]);
+// Statuses the creator may dismiss from the Blink panel. PENDING = an open challenge no
+// rival has accepted yet, so it is safe to abandon — any on-chain wager stays reclaimable
+// via reclaim_challenge once it expires. CHALLENGED/ACTIVE have a committed opponent and
+// must go through the surrender flow instead of a silent local clear.
+const BLINK_CLEARABLE_STATUSES = new Set<PrivateChallengeStatus>([
+  "EXPIRED",
+  "FORFEITED",
+  "COMPLETED",
+  "PENDING",
+]);
 
 function toBaseUnitWager(wagerUsd: string) {
   const value = Number.parseFloat(wagerUsd);
@@ -1753,10 +1763,18 @@ export function LobbyScreen() {
           waitingLabel={activeBlinkWaitingLabel}
           notificationPermission={browserNotificationPermission}
           notice={blinkChallengeNotice}
-          canClear={Boolean(activeBlinkStatus && BLINK_TERMINAL_STATUSES.has(activeBlinkStatus))}
+          canClear={Boolean(activeBlinkStatus && BLINK_CLEARABLE_STATUSES.has(activeBlinkStatus))}
+          clearLabel={activeBlinkStatus === "PENDING" ? "Dismiss Challenge" : "Clear"}
           onEnableNotifications={enableBlinkBrowserNotifications}
           onClose={() => setBlinkChallengePanelOpen(false)}
-          onClear={() => clearActiveBlinkChallenge("Blink challenge cleared locally.", "success")}
+          onClear={() =>
+            clearActiveBlinkChallenge(
+              activeBlinkStatus === "PENDING"
+                ? "Challenge dismissed. Your wager is reclaimable on-chain after it expires."
+                : "Blink challenge cleared locally.",
+              "success",
+            )
+          }
         />
       )}
       {blinkJoinSnapshot && !blinkConfirmingOpen && !blinkCharacterSelectOpen && (
