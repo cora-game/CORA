@@ -533,6 +533,8 @@ export class Lifecycle {
         if (!result.ok) {
           console.error(`[Lifecycle] Settlement failed for room ${room.id}`);
         }
+      }).catch((err) => {
+        console.error(`[Lifecycle] Settlement threw for room ${room.id}:`, err);
       });
     }
 

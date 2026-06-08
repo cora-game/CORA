@@ -459,14 +459,13 @@ export class Blockchain {
 
     // Normal match outcome: action = 0
     const action = 0;
-    const settlementSignature = signSettlementAuthorization(
-      action,
-      room.matchIdBytes,
-      winnerAddress,
-    );
-
+    let settlementSignature: string;
     let transactionSignature: string | undefined;
     try {
+      // Sign INSIDE the try so an invalid winner address (or any signing error)
+      // returns a failed result instead of rejecting. An unhandled rejection here
+      // would crash the whole process — taking every other live match down with it.
+      settlementSignature = signSettlementAuthorization(action, room.matchIdBytes, winnerAddress);
       transactionSignature = await submitSettlementTransaction(action, room.matchIdBytes, winnerAddress);
       console.log(`[RoomBlockchain] On-chain settlement completed. Tx: ${transactionSignature}`);
       if (room.queueMatchPersisted) {
@@ -475,7 +474,7 @@ export class Blockchain {
     } catch (err) {
       console.error(`[RoomBlockchain] Auto-settlement failed:`, err);
       if (room.queueMatchPersisted) {
-        await this.manager.queueMatches.markSettlementFailed(room.id, winnerAddress, err);
+        await this.manager.queueMatches.markSettlementFailed(room.id, winnerAddress, err).catch(() => {});
       }
       return { ok: false, error: err };
     }

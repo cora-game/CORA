@@ -40,6 +40,11 @@ COPY packages/shared-types ./packages/shared-types
 COPY packages/game-logic ./packages/game-logic
 # Solana IDL JSON loaded at runtime by services/magicblock.ts (cora_battle + escrow).
 COPY packages/solana-client ./packages/solana-client
+# Question bank read at runtime by src/questions.ts from <repo>/data/questions/*.json.
+# pool.json is git-ignored (kept out of the public repo so answers stay private) but
+# present in the local build context, so it bakes into the image here. Without this the
+# game engine fails to initialize ("Failed to initialize game engine") and no match starts.
+COPY data ./data
 
 WORKDIR /app/apps/api
 EXPOSE 8080

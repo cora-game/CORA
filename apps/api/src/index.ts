@@ -13,6 +13,17 @@ import { createQueueSocketRoute } from './routes/queueSocket';
 import { createQuestionsRouter } from './routes/questions';
 import { startEventListener } from './utils/eventListener';
 
+// Last-resort safety net: this server holds all matchmaking/room state in memory and
+// runs a single instance, so a stray unhandled rejection/exception must NOT crash the
+// process — that would drop every live match at once. Log loudly and stay alive; the
+// failing operation is already isolated to one match's handler.
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL-GUARD] Unhandled promise rejection (process kept alive):', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL-GUARD] Uncaught exception (process kept alive):', err);
+});
+
 const { upgradeWebSocket, websocket } = createBunWebSocket<unknown>();
 const app = new Hono();
 const roomManager = new RoomManager();

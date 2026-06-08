@@ -180,6 +180,8 @@ export class Engine {
             if (!result.ok) {
               console.error(`[RoomEngine] Settlement failed for room ${room.id}`);
             }
+          }).catch((err) => {
+            console.error(`[RoomEngine] Settlement threw for room ${room.id}:`, err);
           });
           this.manager.network.broadcastToRoom(room, {
             type: 'matchResult',
