@@ -1,0 +1,13 @@
+{
+  "name": "cora-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "packages/contracts/solana/*"
+  ],
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.3",
+    "ws": "^8.20.0"
+  }
+}

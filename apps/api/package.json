@@ -1,0 +1,31 @@
+{
+  "name": "api",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "start": "bun run src/index.ts",
+    "lint": "eslint .",
+    "test:matchmaking": "bun run scripts/test-matchmaking.ts",
+    "test:ws": "bun run scripts/test-ws.ts",
+    "test:blink-soft": "bun run scripts/test-blink-soft-commitment.ts"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.32.1",
+    "@covalenthq/client-sdk": "^3.0.6",
+    "@magicblock-labs/bolt-sdk": "latest",
+    "@magicblock-labs/ephemeral-rollups-sdk": "latest",
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.98.4",
+    "@supabase/supabase-js": "^2.105.3",
+    "bs58": "^6.0.0",
+    "hono": "^4.2.0",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "eslint": "^9.0.0",
+    "typescript": "^5.0.0",
+    "typescript-eslint": "^8.0.0"
+  }
+}

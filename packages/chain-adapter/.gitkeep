@@ -1,0 +1,5 @@
+# Placeholder to track chain-adapter folder
+# This will contain:
+# - solana.ts (Solana specific adapter implementation)
+# - evm.ts (EVM specific adapter implementation)
+# - index.ts (Unified GameChainAdapter interface)
