@@ -12,11 +12,15 @@
 FROM oven/bun:1.3.14-slim AS install
 WORKDIR /app
 
+# Every workspace member's manifest must be present or `bun install --frozen-lockfile`
+# sees a different workspace than bun.lock and bails with "lockfile had changes".
 COPY package.json bun.lock ./
 COPY apps/api/package.json ./apps/api/package.json
 COPY apps/web/package.json ./apps/web/package.json
 COPY packages/shared-types/package.json ./packages/shared-types/package.json
 COPY packages/game-logic/package.json ./packages/game-logic/package.json
+COPY packages/contracts/solana/cora-battle/package.json ./packages/contracts/solana/cora-battle/package.json
+COPY packages/contracts/solana/cora-escrow/package.json ./packages/contracts/solana/cora-escrow/package.json
 RUN bun install --frozen-lockfile
 
 # ── runtime stage ─────────────────────────────────────────────────────────────
@@ -34,6 +38,8 @@ COPY package.json bun.lock ./
 COPY apps/api ./apps/api
 COPY packages/shared-types ./packages/shared-types
 COPY packages/game-logic ./packages/game-logic
+# Solana IDL JSON loaded at runtime by services/magicblock.ts (cora_battle + escrow).
+COPY packages/solana-client ./packages/solana-client
 
 WORKDIR /app/apps/api
 EXPOSE 8080

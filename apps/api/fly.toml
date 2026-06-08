@@ -10,7 +10,7 @@
 # instances with separate queues. auto_stop is off so WS + the event listener
 # stay alive even when idle.
 
-app = "cora-api"
+app = "cora-game-api"
 primary_region = "sin"   # Singapore — low latency for SEA. Change as needed.
 
 [build]
