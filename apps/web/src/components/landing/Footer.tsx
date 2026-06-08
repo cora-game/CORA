@@ -31,8 +31,7 @@ export function Footer() {
 
         <div className="font-gabarito flex flex-wrap items-center gap-6 text-sm font-bold text-[var(--color-muted)]">
           {[
-            { label: "Discord", href: "#" },
-            { label: "X / Twitter", href: "#" },
+            { label: "X / Twitter", href: "https://x.com/coragame_labs" },
             { label: "Docs", href: "#" },
           ].map((link) => (
             <Link
