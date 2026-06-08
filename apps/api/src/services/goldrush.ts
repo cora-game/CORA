@@ -1,11 +1,38 @@
 import { GoldRushClient } from '@covalenthq/client-sdk';
 import { MAINNET_TOKEN_MINTS, resolveTokenMint } from '../config/tokens';
 
-const apiKey = process.env.GOLDRUSH_API_KEY || 'cqt_dummy';
-const client = new GoldRushClient(apiKey);
 // NOTE: Covalent only indexes solana-mainnet. Devnet balances won't appear,
 // but pricing data and API-key validation will work correctly.
 const chainId = 'solana-mainnet';
+
+// Lazily construct the GoldRush client on first use instead of at import time.
+// Constructing it eagerly meant a missing/invalid key could throw before the HTTP
+// server bound, silently preventing the API from ever starting. Now a bad key just
+// disables pricing/balance features (callers fall back gracefully) and the server
+// still boots.
+let goldRushClient: GoldRushClient | null = null;
+let goldRushInitFailed = false;
+
+function getGoldRushClient(): GoldRushClient | null {
+  if (goldRushClient) return goldRushClient;
+  if (goldRushInitFailed) return null;
+
+  const apiKey = process.env.GOLDRUSH_API_KEY;
+  if (!apiKey) {
+    console.warn('[GoldRush] GOLDRUSH_API_KEY not set — pricing/balance features disabled.');
+    goldRushInitFailed = true;
+    return null;
+  }
+
+  try {
+    goldRushClient = new GoldRushClient(apiKey);
+    return goldRushClient;
+  } catch (err) {
+    console.error('[GoldRush] Failed to initialize client:', err instanceof Error ? err.message : err);
+    goldRushInitFailed = true;
+    return null;
+  }
+}
 
 export interface WalletPlayability {
   playable: boolean;
@@ -38,6 +65,16 @@ export async function getWalletPlayability(
   _arenaId: string,
   tokenMint: string
 ): Promise<WalletPlayability> {
+  const client = getGoldRushClient();
+  if (!client) {
+    return {
+      playable: false,
+      reason: 'Balance service unavailable',
+      reliable: false,
+      lastCheckedAt: new Date().toISOString(),
+    };
+  }
+
   try {
     const res = await client.BalanceService.getTokenBalancesForWalletAddress(chainId, address, {
       quoteCurrency: 'USD'
@@ -100,6 +137,8 @@ const PRICE_PROBE_WALLET = 'vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg'; // Sol
 export async function getTokenPriceUsd(tokenMint: string): Promise<number | null> {
   const mint = resolveTokenMint(tokenMint, 'mainnet') ?? tokenMint;
   const symbol = MINT_TO_SYMBOL[mint] ?? tokenMint.toUpperCase();
+  const client = getGoldRushClient();
+  if (!client) return null;
   try {
     const res = await client.BalanceService.getTokenBalancesForWalletAddress(
       chainId,

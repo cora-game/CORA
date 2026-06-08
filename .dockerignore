@@ -1,0 +1,32 @@
+# Keep the build context small and NEVER ship secrets or local junk into images.
+
+# Dependencies / build outputs (reinstalled / rebuilt inside the image)
+**/node_modules
+**/.next
+**/dist
+**/build
+**/out
+**/target
+
+# Secrets & local env — config is injected at runtime via platform secrets.
+# (.env.example is intentionally kept so the template ships.)
+**/.env
+**/.env.*
+!**/.env.example
+
+# VCS / CI / editor
+.git
+.github
+.vscode
+.idea
+
+# Logs & OS files
+*.log
+**/*.log
+.DS_Store
+Thumbs.db
+
+# Docs & misc not needed at runtime
+docs
+*.md
+!apps/api/**/*.md

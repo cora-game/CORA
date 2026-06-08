@@ -1,0 +1,47 @@
+# Fly.io config for the CORA API (Bun + WebSocket + on-chain event listener).
+#
+# Deploy from the repo root so the Docker build context includes the workspace:
+#   fly launch --no-deploy --copy-config --dockerfile apps/api/Dockerfile   # first time
+#   fly deploy --config apps/api/fly.toml --dockerfile apps/api/Dockerfile
+#
+# IMPORTANT — matchmaking, queue, room and Blink state all live in process memory
+# (no Redis/shared store yet), and the server holds one on-chain log subscription.
+# Run EXACTLY ONE machine. Do not scale out, or players will land on different
+# instances with separate queues. auto_stop is off so WS + the event listener
+# stay alive even when idle.
+
+app = "cora-api"
+primary_region = "sin"   # Singapore — low latency for SEA. Change as needed.
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  NODE_ENV = "production"
+  # Public, non-secret config can live here. Secrets go via `fly secrets set` (below).
+  # API_BASE_URL is your deployed URL — used to build Blink challenge links.
+  # API_BASE_URL = "https://cora-api.fly.dev"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 1000
+    soft_limit = 800
+
+[[http_service.checks]]
+  method = "GET"
+  path = "/health"
+  interval = "15s"
+  timeout = "2s"
+  grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

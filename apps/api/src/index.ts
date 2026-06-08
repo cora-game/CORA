@@ -22,7 +22,26 @@ roomManager.startBlinkJanitor();
 roomManager.startPublicRoomJanitor();
 
 // Global middleware
-app.use('/*', cors());
+// Restrict CORS to the configured frontend origin(s). Set FE_BASE_URL (comma-separated
+// for multiple) in production to your deployed web origin(s). When unset, CORS stays
+// permissive so local and devnet development keeps working without extra config.
+const allowedOrigins = (process.env.FE_BASE_URL ?? '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+app.use('/*', cors({
+  origin: (origin) => {
+    if (!origin) return origin; // non-browser / same-origin requests have no Origin header
+    if (allowedOrigins.includes(origin)) return origin;
+    // Allow localhost during development regardless of FE_BASE_URL.
+    if (process.env.NODE_ENV !== 'production' && /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
+      return origin;
+    }
+    // No FE_BASE_URL configured -> permissive; otherwise block unknown origins.
+    return allowedOrigins.length === 0 ? origin : null;
+  },
+  credentials: true,
+}));
 app.use('/*', rateLimiter);
 
 // Mounted routers
