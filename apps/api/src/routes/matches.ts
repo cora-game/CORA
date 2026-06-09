@@ -1,4 +1,4 @@
-import { PublicKey } from '@solana/web3.js';
+import { isAddress } from 'viem';
 import { Hono } from 'hono';
 import type { RoomManager } from '../managers/RoomManager';
 import { getClient, isSupabaseConfigured } from '../services/supabase';
@@ -10,9 +10,7 @@ export function createMatchesRouter(_roomManager: RoomManager) {
     const wallet = c.req.param('wallet');
     const limit = Math.min(Math.max(Number(c.req.query('limit') ?? '50') || 50, 1), 100);
 
-    try {
-      new PublicKey(wallet);
-    } catch {
+    if (!isAddress(wallet)) {
       return c.json({ error: 'Invalid wallet address' }, 400);
     }
 
