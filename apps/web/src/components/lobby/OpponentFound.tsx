@@ -3,14 +3,9 @@
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import type { Transaction } from "@solana/web3.js";
+import { useAccount } from "wagmi";
 import type { Arena, Scientist } from "./LobbyScreen";
-import {
-  DepositIntentError,
-  prepareDepositIntentTransaction,
-  sendDepositIntentTransaction,
-} from "@/lib/solana/signDepositIntent";
+import { DepositIntentError, depositToMatch } from "@/lib/evm/deposit";
 import { HydratedWalletButton } from "@/components/wallet/HydratedWalletButton";
 import { useMatchSocket } from "@/hooks/useMatchSocket";
 import { DepositPanel } from "@/components/deposit/DepositPanel";
@@ -37,7 +32,6 @@ type SigningState = "idle" | "signing" | "waiting" | "error";
 const AGREEMENT_TIMEOUT_SECONDS = 30;
 const PHANTOM_SIGNING_WARNING_MS = 12_000;
 const SIGNING_TIMEOUT_MS = 28_000;
-const PREPARED_DEPOSIT_MAX_AGE_MS = 45_000;
 const OPPONENT_FOUND_PRELOADED_AUDIO = [GAME_AUDIO.matched, GAME_AUDIO.countdown, GAME_AUDIO.battleMusic] as const;
 
 function shortWallet(address: string) {
@@ -74,8 +68,7 @@ export function OpponentFound({
   onTimeout,
 }: OpponentFoundProps) {
   const router = useRouter();
-  const { connection } = useConnection();
-  const wallet = useWallet();
+  const { address: walletPublicKey } = useAccount();
   const [secondsLeft, setSecondsLeft] = useState(AGREEMENT_TIMEOUT_SECONDS);
   const [signingState, setSigningState] = useState<SigningState>("idle");
   const [signedDepositSignature, setSignedDepositSignature] = useState<string | null>(null);
@@ -93,11 +86,6 @@ export function OpponentFound({
   const depositIntentConfirmedRef = useRef(false);
   const lastHandledDepositUnlockAtRef = useRef<number | null>(null);
   const cancelFiredRef = useRef(false);
-  const preparedDepositKeyRef = useRef<string | null>(null);
-  const preparedDepositPromiseRef = useRef<Promise<Transaction> | null>(null);
-  const preparedDepositTransactionRef = useRef<Transaction | null>(null);
-  const preparedDepositReadyAtRef = useRef<number | null>(null);
-  const preparedDepositAbortRef = useRef<AbortController | null>(null);
   const matchedSoundPlayedRef = useRef(false);
   const lastCountdownSoundRef = useRef<number | null>(null);
   const myHappyExpressionSrc = useMemo(
@@ -105,7 +93,7 @@ export function OpponentFound({
     [myScientist.id],
   );
 
-  const walletAddress = isGuest ? myWallet : wallet.publicKey?.toBase58() ?? myWallet;
+  const walletAddress = isGuest ? myWallet : walletPublicKey ?? myWallet;
   const visibleWalletAddress = displayWalletAddress ?? (isGuest ? myWallet : walletAddress);
   const displayWalletLabel = identityLabel(visibleWalletAddress, displayAsGuest);
   usePreloadedAudio(OPPONENT_FOUND_PRELOADED_AUDIO);
@@ -141,16 +129,12 @@ export function OpponentFound({
     effectiveRole === "playerA" && signingState === "waiting" && Boolean(signedDepositSignature);
   const shouldShowCountdown = !isBotMatch && !isPlayerBWaitingUnlock && signingState !== "waiting";
   const canAttemptSign =
-    Boolean(wallet.publicKey) &&
+    Boolean(walletPublicKey) &&
     signingState !== "signing" &&
     signingState !== "waiting" &&
     !isBotMatch &&
     !isPlayerBWaitingUnlock &&
     !signed;
-  const depositPreparationKey =
-    wallet.publicKey && !signedDepositSignature && !isBotMatch
-      ? `${roomId}:${wallet.publicKey.toBase58()}:${arena.token}:${wagerUsd}`
-      : null;
   const reassignedRoomId =
     lastMatchFound?.roomId && lastMatchFound.roomId !== roomId ? lastMatchFound.roomId : null;
   const roomCancelledNotice = useMemo(
@@ -158,15 +142,14 @@ export function OpponentFound({
     [lastRoomCancelled],
   );
   const magicBlockUi = getDepositMagicBlockUi({
-    erEnabled: gameState?.erEnabled,
-    erStatus: gameState?.erStatus,
+    erEnabled: undefined,
+    erStatus: undefined,
     status: gameState?.status,
     effectiveRole,
     signingState,
     depositUnlockedAt,
   });
   const hasArenaPreparationSignal =
-    Boolean(gameState?.erStatus && gameState.erStatus !== "none") ||
     gameState?.status === "playing" ||
     gameState?.status === "settling";
   const playerBHasCompletedSecondDeposit =
@@ -215,71 +198,8 @@ export function OpponentFound({
   const isMagicBlockArenaLoading = displayedMagicBlockUi.tone === "magicblock";
   const isArenaProcessing = displayedMagicBlockUi.tone === "magicblock" || displayedMagicBlockUi.showPulse;
 
-  useEffect(() => {
-    if (!depositPreparationKey || !wallet.publicKey) {
-      preparedDepositAbortRef.current?.abort();
-      preparedDepositAbortRef.current = null;
-      preparedDepositPromiseRef.current = null;
-      preparedDepositTransactionRef.current = null;
-      preparedDepositReadyAtRef.current = null;
-      preparedDepositKeyRef.current = null;
-      return;
-    }
-
-    if (preparedDepositKeyRef.current === depositPreparationKey && preparedDepositPromiseRef.current) return;
-
-    preparedDepositAbortRef.current?.abort();
-    const abortController = new AbortController();
-    preparedDepositAbortRef.current = abortController;
-    preparedDepositKeyRef.current = depositPreparationKey;
-    preparedDepositTransactionRef.current = null;
-    preparedDepositReadyAtRef.current = null;
-    const startedAt = performance.now();
-
-    const promise = prepareDepositIntentTransaction({
-      wallet,
-      roomId,
-      token: arena.token,
-      wagerUsd,
-      signal: abortController.signal,
-    });
-
-    preparedDepositPromiseRef.current = promise;
-    promise
-      .then((transaction) => {
-        preparedDepositTransactionRef.current = transaction;
-        preparedDepositReadyAtRef.current = Date.now();
-        console.info("[OpponentFound] Deposit transaction prepared", {
-          roomId,
-          role: effectiveRole ?? "unknown",
-          ms: Math.round(performance.now() - startedAt),
-        });
-      })
-      .catch((error) => {
-        if (abortController.signal.aborted) return;
-        console.warn("[OpponentFound] Deposit transaction prefetch failed", {
-          roomId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        if (preparedDepositPromiseRef.current === promise) {
-          preparedDepositPromiseRef.current = null;
-          preparedDepositTransactionRef.current = null;
-          preparedDepositReadyAtRef.current = null;
-          preparedDepositKeyRef.current = null;
-        }
-      });
-
-    return () => {
-      abortController.abort();
-      if (preparedDepositAbortRef.current === abortController) {
-        preparedDepositAbortRef.current = null;
-        preparedDepositPromiseRef.current = null;
-        preparedDepositTransactionRef.current = null;
-        preparedDepositReadyAtRef.current = null;
-        preparedDepositKeyRef.current = null;
-      }
-    };
-  }, [arena.token, depositPreparationKey, effectiveRole, roomId, wagerUsd, wallet]);
+  // On EVM there is no "prepare tx" step — the deposit is a single contract call
+  // (`deposit(matchId)` with value = wager) built and sent at sign time.
 
   useEffect(() => {
     if (matchedSoundPlayedRef.current) return;
@@ -485,11 +405,6 @@ export function OpponentFound({
     );
   }
 
-  function isAbortedDepositPreparation(error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    return message.toLowerCase().includes("aborted");
-  }
-
   function classifyDepositError(error: unknown): string {
     if (error instanceof DepositIntentError) {
       switch (error.code) {
@@ -575,7 +490,7 @@ export function OpponentFound({
       roomId,
       role: effectiveRole ?? "unknown",
       connectionState,
-      hasWallet: Boolean(wallet.publicKey),
+      hasWallet: Boolean(walletPublicKey),
       canAttemptSign,
       playerBLocked: isPlayerBWaitingUnlock,
       depositUnlockedAt,
@@ -592,62 +507,18 @@ export function OpponentFound({
 
     await unlockAudioPlayback([GAME_AUDIO.battleMusic]);
 
-    const signingAbortController = new AbortController();
     let signingTimeoutId: ReturnType<typeof setTimeout> | null = null;
     try {
       const signingTimeout = new Promise<never>((_, reject) => {
         signingTimeoutId = setTimeout(() => {
-          signingAbortController.abort();
           reject(new DepositIntentError("unknown", "signing_timeout"));
         }, SIGNING_TIMEOUT_MS);
       });
+      // The wager is server-authoritative: the API initialized the on-chain match
+      // with this exact amount (wei) and broadcasts it in the game state.
+      const wagerWei = BigInt(gameState?.wagerAmount || "1000000000000000");
       const signature = await Promise.race([
-        (async () => {
-          let preparedTransaction: Transaction;
-          const preparedAge =
-            preparedDepositReadyAtRef.current === null ? Number.POSITIVE_INFINITY : Date.now() - preparedDepositReadyAtRef.current;
-          if (
-            preparedDepositKeyRef.current === depositPreparationKey &&
-            preparedDepositTransactionRef.current &&
-            preparedAge < PREPARED_DEPOSIT_MAX_AGE_MS
-          ) {
-            preparedTransaction = preparedDepositTransactionRef.current;
-          } else if (preparedDepositKeyRef.current === depositPreparationKey && preparedDepositPromiseRef.current) {
-            try {
-              preparedTransaction = await preparedDepositPromiseRef.current;
-            } catch (error) {
-              if (!isAbortedDepositPreparation(error) || signingAbortController.signal.aborted) {
-                throw error;
-              }
-              preparedDepositPromiseRef.current = null;
-              preparedDepositTransactionRef.current = null;
-              preparedDepositReadyAtRef.current = null;
-              preparedDepositKeyRef.current = null;
-              preparedTransaction = await prepareDepositIntentTransaction({
-                wallet,
-                roomId,
-                token: arena.token,
-                wagerUsd,
-                signal: signingAbortController.signal,
-              });
-            }
-          } else {
-            preparedTransaction = await prepareDepositIntentTransaction({
-              wallet,
-              roomId,
-              token: arena.token,
-              wagerUsd,
-              signal: signingAbortController.signal,
-            });
-          }
-
-          return sendDepositIntentTransaction({
-            connection,
-            wallet,
-            transaction: preparedTransaction,
-            signal: signingAbortController.signal,
-          });
-        })(),
+        depositToMatch({ roomId, wagerWei, token: gameState?.tokenMint }),
         signingTimeout,
       ]);
 
@@ -749,7 +620,7 @@ export function OpponentFound({
       if (isBattleSnapshotReady) return "Practice round ready. Starting battle.";
       return "No deposit needed. Preparing your practice round.";
     }
-    if (!wallet.publicKey) return "Connect Phantom wallet first.";
+    if (!walletPublicKey) return "Connect your wallet first.";
     if (isPlayerBWaitingUnlock) {
       if (isDisconnected) {
         const code = lastSocketCloseInfo?.code;
@@ -783,7 +654,7 @@ export function OpponentFound({
     if (opponentFailedDepositAt) return "opponent_failed";
     if (signingState === "error") return "error";
     if (isBotMatch) return isBattleSnapshotReady || battleLaunchCountdown !== null ? "confirmed" : "practice";
-    if (!wallet.publicKey) return "wallet_required";
+    if (!walletPublicKey) return "wallet_required";
     if (signingState === "signing") return "signing";
     if (battleLaunchCountdown !== null) return "confirmed";
     if (isBattleSnapshotReady && signedDepositSignature) return "confirmed";
@@ -1237,7 +1108,7 @@ export function OpponentFound({
               ) : null
             }
             walletSlot={
-              !wallet.publicKey && !isGuest ? (
+              !walletPublicKey && !isGuest ? (
                 <div className="pt-1">
                   <HydratedWalletButton />
                 </div>

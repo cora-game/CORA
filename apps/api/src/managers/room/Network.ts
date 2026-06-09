@@ -36,13 +36,10 @@ export class Network {
         // Engine owns the game state
         payload = {
           ...room.engine.getStateForPlayer(address),
-          tokenMint: room.tokenMint || '',
+          tokenMint: room.tokenMint || 'ETH',
           wagerAmount: room.wagerAmount?.toString() || '0',
-          wagerUsdValue: room.wagerUsdValue || undefined,
+          wagerEthValue: room.wagerEthValue || undefined,
           roomType: room.roomType,
-          erEnabled: room.erEnabled,
-          erStatus: room.erProofMeta?.status ?? room.erLifecycleStatus,
-          erSessionPda: room.erSessionPda,
         };
         this.applyPresence(room, payload);
       } else {
@@ -104,13 +101,10 @@ export class Network {
           damageLog: [],
           currentRound: 1,
           roundsToWin: GameEngine.ROUNDS_TO_WIN,
-          tokenMint: room.tokenMint || '',
+          tokenMint: room.tokenMint || 'ETH',
           wagerAmount: room.wagerAmount?.toString() || '0',
-          wagerUsdValue: room.wagerUsdValue || undefined,
+          wagerEthValue: room.wagerEthValue || undefined,
           roomType: room.roomType,
-          erEnabled: room.erEnabled,
-          erStatus: room.erProofMeta?.status ?? room.erLifecycleStatus,
-          erSessionPda: room.erSessionPda,
         };
       }
 

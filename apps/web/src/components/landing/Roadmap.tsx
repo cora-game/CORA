@@ -23,10 +23,10 @@ const PHASES: Phase[] = [
     items: [
       "Real-time 1v1 logic battles — cards, HP, 10s answer window",
       "Instant matchmaking + free bot practice (no wallet)",
-      "Blink / private challenges via shareable links",
+      "Private challenges via shareable links",
       "On-chain escrow + settlement — winner takes 97.5%",
-      "SOL / BONK / USDC wagers · MagicBlock ER battle state",
-      "$CORA token launch on Solana",
+      "ETH / USDC wagers on Base Sepolia",
+      "$CORA token launch on Base",
     ],
   },
   {
@@ -213,7 +213,7 @@ export function Roadmap() {
         </div>
 
         <p className="font-gabarito mt-10 text-center text-xs text-[var(--warm-muted)]">
-          Roadmap is directional and may evolve. Currently live on Solana devnet.
+          Roadmap is directional and may evolve. Currently live on Base Sepolia.
         </p>
       </div>
     </section>

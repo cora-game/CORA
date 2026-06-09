@@ -1,4 +1,5 @@
-import { Connection, Keypair } from '@solana/web3.js';
+import type { Hex } from 'viem';
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import type { WsMessage } from '@shared/websocket';
 import { deriveMatchId } from '@shared/escrow';
 import { CHARACTER_DEFS } from '@shared/characterStats';
@@ -11,8 +12,9 @@ import { Blockchain } from './room/Blockchain';
 import type { Room, RoomSocket } from './room/types';
 import { createBlinkMatchStore, type BlinkMatch, type BlinkMatchStore } from '../services/blinkMatches';
 import { createQueueMatchStore, type QueueMatchStore } from '../services/queueMatches';
-import { BlinkTransactionBuilder } from '../services/BlinkTransactionBuilder';
 import { submitSettlementTransaction } from '../utils/settlement';
+import { ESCROW_ADDRESS, publicClient } from '../config/chain';
+import { ESCROW_CONSTANTS, resolveToken, SUPPORTED_TOKENS } from '@shared/escrow';
 
 export class RoomManager {
   public store: Store;
@@ -26,8 +28,8 @@ export class RoomManager {
   private blinkJanitorInterval: ReturnType<typeof setInterval> | null = null;
   private publicJanitorInterval: ReturnType<typeof setInterval> | null = null;
 
-  constructor(options: { queueMatches?: QueueMatchStore; blinkMatches?: BlinkMatchStore; erEnabled?: boolean } = {}) {
-    this.store = new Store(options.erEnabled);
+  constructor(options: { queueMatches?: QueueMatchStore; blinkMatches?: BlinkMatchStore } = {}) {
+    this.store = new Store();
     this.network = new Network();
     this.engine = new Engine(this);
     this.lifecycle = new Lifecycle(this);
@@ -46,68 +48,90 @@ export class RoomManager {
   }
 
   /**
-   * Step 1 of private room creation (true Blink flow).
-   * Generates roomId + unsigned create_open_challenge tx.
-   * DB row is NOT written yet — that happens in confirmPrivateRoom after on-chain confirmation.
+   * Step 1 of private room creation (EVM challenge flow).
+   * Generates a roomId + the on-chain params the frontend needs to call
+   * `createOpenChallenge(matchId)` with `value = wagerWei`. No DB row yet —
+   * that's written in confirmPrivateRoom after the tx is mined.
    */
-  public async createPrivateRoom(
-    playerAPubkey: string,
-    tokenMint: string,
-    wagerAmount: bigint,
-  ): Promise<{ roomId: string; transaction: string }> {
+  public createPrivateRoom(
+    _playerAddress: string,
+    token: string,
+  ): { roomId: string; matchId: Hex; escrowAddress: string; chainId: number; token: string; wagerWei: string } {
     const roomId = crypto.randomUUID();
-    const matchIdBytes = deriveMatchId(roomId);
-
-    const transaction = await BlinkTransactionBuilder.buildCreateOpenChallengeTransaction(
-      playerAPubkey,
-      matchIdBytes,
-      tokenMint,
-      wagerAmount,
-    );
-
-    return { roomId, transaction };
+    const info = resolveToken(token) ?? SUPPORTED_TOKENS.ETH;
+    const wager =
+      info.symbol === 'ETH' && process.env.DEFAULT_WAGER_WEI
+        ? BigInt(process.env.DEFAULT_WAGER_WEI)
+        : info.symbol === 'USDC' && process.env.DEFAULT_WAGER_USDC
+          ? BigInt(process.env.DEFAULT_WAGER_USDC)
+          : info.defaultWager;
+    return {
+      roomId,
+      matchId: deriveMatchId(roomId),
+      escrowAddress: ESCROW_ADDRESS,
+      chainId: ESCROW_CONSTANTS.CHAIN_ID,
+      token: info.symbol,
+      wagerWei: wager.toString(),
+    };
   }
 
   /**
-   * Step 2 of private room creation (true Blink flow).
-   * Verifies the create_open_challenge tx is confirmed on-chain, then writes the DB row.
-   * Returns the BlinkMatch on success, or throws on timeout/failure.
+   * Step 2 of private room creation (EVM challenge flow).
+   * Verifies the `createOpenChallenge` tx is mined, then writes the DB row.
+   * Returns the BlinkMatch on success, or throws on failure/revert.
    */
   public async confirmPrivateRoom(
     roomId: string,
     address: string,
-    txSignature: string,
-    tokenMint: string,
-    wagerAmount: bigint,
+    txHash: string,
+    token: string,
+    wagerWei: bigint,
   ): Promise<BlinkMatch> {
-    const rpcUrl = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
-    const connection = new Connection(rpcUrl, 'confirmed');
-
-    // 30-second confirmation timeout — matches on-chain deposit timeout
-    const result = await connection.confirmTransaction(txSignature, 'confirmed');
-
-    if (result.value.err) {
-      throw new Error(`Transaction failed on-chain: ${JSON.stringify(result.value.err)}`);
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash as Hex });
+    if (receipt.status !== 'success') {
+      throw new Error(`Transaction reverted on-chain: ${txHash}`);
     }
 
-    // On-chain confirmed — safe to write DB row with the pre-determined roomId
+    // On-chain confirmed — safe to write DB row with the pre-determined roomId.
     const match = await this.blinkMatches.createPending({
       id: roomId,
       creatorWallet: address,
-      tokenMint,
-      wagerAmount,
+      tokenMint: resolveToken(token)?.symbol ?? 'ETH',
+      wagerAmount: wagerWei,
     });
-    console.log(`[Blink] Private room ${roomId} confirmed on-chain (tx: ${txSignature}). DB row written as PENDING.`);
+    console.log(`[Challenge] Private room ${roomId} confirmed on-chain (tx: ${txHash}). DB row written as PENDING.`);
 
     return match;
+  }
+
+  /**
+   * EVM challenge accept: verify the on-chain `acceptChallenge` tx, mark the
+   * challenge accepted in the DB, and hydrate the room so both players can join.
+   */
+  public async acceptPrivateChallenge(
+    roomId: string,
+    challengerAddress: string,
+    txHash: string,
+  ): Promise<{ status: string; roomId: string }> {
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash as Hex });
+    if (receipt.status !== 'success') {
+      throw new Error(`Accept transaction reverted on-chain: ${txHash}`);
+    }
+
+    const result = await this.blinkMatches.acceptPending(roomId, challengerAddress);
+    if (!result.ok) {
+      throw new Error(`Challenge cannot be accepted: ${result.reason}`);
+    }
+    await this.hydrateBlinkRoom(result.match);
+    return { status: result.match.status, roomId: result.match.id };
   }
 
   public joinPrivateRoom(playerBPubkey: string, roomId: string): 'ok' | 'not_found' | 'full' | 'cancelled' {
     return this.lifecycle.joinPrivateRoom(playerBPubkey, roomId);
   }
 
-  public async queueMatch(address: string, signal?: AbortSignal): Promise<string> {
-    return this.queue.queueMatch(address, signal);
+  public async queueMatch(address: string, token?: string, signal?: AbortSignal): Promise<string> {
+    return this.queue.queueMatch(address, token, signal);
   }
 
   public createBotMatch(
@@ -130,7 +154,7 @@ export class RoomManager {
     }
 
     const roomId = `bot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const botAddress = Keypair.generate().publicKey.toBase58();
+    const botAddress = privateKeyToAccount(generatePrivateKey()).address;
     const room = this.store.createRoom(roomId);
     const botCharacterId = this.randomBotCharacterId();
 
@@ -142,7 +166,7 @@ export class RoomManager {
     room.playerBUnlocked = true;
     room.tokenMint = options.tokenMint ?? null;
     room.wagerAmount = options.wagerAmount ?? 0n;
-    room.wagerUsdValue = '0.00';
+    room.wagerEthValue = '0';
     room.playerMeta.set(address, {
       hasDeposited: true,
       characterId: options.characterId && CHARACTER_DEFS[options.characterId] ? options.characterId : 'einstein',
@@ -274,9 +298,8 @@ export class RoomManager {
       if (update.status === 'FORFEITED') {
         const match = await this.blinkMatches.get(update.id);
         if (match?.opponentWallet) {
-          const matchIdBytes = deriveMatchId(update.id);
           try {
-            await submitSettlementTransaction(0, matchIdBytes, match.opponentWallet);
+            await submitSettlementTransaction(0, deriveMatchId(update.id), match.opponentWallet);
             await this.blinkMatches.markCompleted(update.id);
             console.log(`[BlinkJanitor] FORFEITED match ${update.id} settled on-chain. Challenger ${match.opponentWallet} awarded. DB marked COMPLETED.`);
           } catch (err) {
@@ -339,7 +362,7 @@ export class RoomManager {
     this.store.trackPlayer(match.creatorWallet, match.id);
     this.store.trackPlayer(match.opponentWallet, match.id);
 
-    void this.blockchain.fetchWagerUsd(room);
+    this.blockchain.fetchWagerEth(room);
     return room;
   }
 

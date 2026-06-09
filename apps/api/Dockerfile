@@ -1,4 +1,4 @@
-# CORA API — Hono + Bun (WebSocket matchmaking + Solana settlement).
+# CORA API — Hono + Bun (WebSocket matchmaking + Base Sepolia settlement via viem).
 #
 # Build context MUST be the repo root (the API imports workspace packages):
 #   docker build -f apps/api/Dockerfile -t cora-api .
@@ -19,8 +19,6 @@ COPY apps/api/package.json ./apps/api/package.json
 COPY apps/web/package.json ./apps/web/package.json
 COPY packages/shared-types/package.json ./packages/shared-types/package.json
 COPY packages/game-logic/package.json ./packages/game-logic/package.json
-COPY packages/contracts/solana/cora-battle/package.json ./packages/contracts/solana/cora-battle/package.json
-COPY packages/contracts/solana/cora-escrow/package.json ./packages/contracts/solana/cora-escrow/package.json
 RUN bun install --frozen-lockfile
 
 # ── runtime stage ─────────────────────────────────────────────────────────────
@@ -38,8 +36,6 @@ COPY package.json bun.lock ./
 COPY apps/api ./apps/api
 COPY packages/shared-types ./packages/shared-types
 COPY packages/game-logic ./packages/game-logic
-# Solana IDL JSON loaded at runtime by services/magicblock.ts (cora_battle + escrow).
-COPY packages/solana-client ./packages/solana-client
 # Question bank read at runtime by src/questions.ts from <repo>/data/questions/*.json.
 # pool.json is git-ignored (kept out of the public repo so answers stay private) but
 # present in the local build context, so it bakes into the image here. Without this the

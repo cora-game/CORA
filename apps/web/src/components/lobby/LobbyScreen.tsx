@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { Keypair } from "@solana/web3.js";
+import { useAccount } from "wagmi";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { AnimatePresence, motion } from "framer-motion";
 import { LobbySetup } from "./LobbySetup";
 import { CharacterSelect } from "./CharacterSelect";
@@ -41,7 +41,7 @@ import {
   type ActiveMatchSession,
   type LobbyDraftSnapshot,
 } from "@/lib/session/matchSession";
-import { DepositIntentError } from "@/lib/solana/signDepositIntent";
+import { DepositIntentError } from "@/lib/evm/deposit";
 import type {
   CharacterOption,
   CharacterSelectionState,
@@ -95,22 +95,22 @@ export const SCIENTISTS: Scientist[] = [
 
 export const ARENAS: Arena[] = [
   {
-    id: "sol",
-    token: "SOL",
-    label: "SOL Arena",
+    id: "eth",
+    token: "ETH",
+    label: "ETH Arena",
     accent: "#9db496",
     frame: "#274137",
     previewBg:
       "radial-gradient(circle at 20% 20%, rgba(157,180,150,0.28), transparent 45%), radial-gradient(circle at 80% 80%, rgba(203,227,193,0.22), transparent 45%), linear-gradient(155deg, #eef6ec 0%, #ddebd8 60%, #d2e2cd 100%)",
   },
   {
-    id: "bonk",
-    token: "BONK",
-    label: "BONK Arena",
-    accent: "#f8d694",
-    frame: "#6f3a28",
+    id: "usdc",
+    token: "USDC",
+    label: "USDC Arena",
+    accent: "#5b8def",
+    frame: "#27407f",
     previewBg:
-      "radial-gradient(circle at 22% 24%, rgba(248,214,148,0.38), transparent 48%), radial-gradient(circle at 75% 78%, rgba(186,105,49,0.24), transparent 44%), linear-gradient(150deg, #fff4df 0%, #f7e3bf 58%, #eed2a2 100%)",
+      "radial-gradient(circle at 22% 24%, rgba(91,141,239,0.30), transparent 48%), radial-gradient(circle at 75% 78%, rgba(39,64,127,0.22), transparent 44%), linear-gradient(150deg, #eef3fb 0%, #dbe6f7 58%, #c9d8ef 100%)",
   },
 ];
 
@@ -174,7 +174,7 @@ function writeStoredGuestAddress(address: string) {
 }
 
 function generateGuestAddress() {
-  return Keypair.generate().publicKey.toBase58();
+  return privateKeyToAccount(generatePrivateKey()).address;
 }
 
 type ActiveRoomSnapshot = ActiveMatchSession;
@@ -219,9 +219,7 @@ export function LobbyScreen() {
   const runtimeConfig = getRuntimeConfig();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { connection } = useConnection();
-  const wallet = useWallet();
-  const { publicKey } = wallet;
+  const { address: publicKey } = useAccount();
   const challengeMode = searchParams.get("challenge") === "1";
   const challengedBy = searchParams.get("ref");
   const requestedArena = searchParams.get("arena");
@@ -347,7 +345,7 @@ export function LobbyScreen() {
     Boolean(selectedArena);
 
   const walletConnected = Boolean(publicKey);
-  const walletAddress = publicKey?.toBase58() ?? "";
+  const walletAddress = publicKey ?? "";
   const isGuestMode = loginMode === "guest";
   const usesGuestIdentity = isGuestMode || isTutorialMode;
   const matchmakerAddress = usesGuestIdentity ? guestAddress : walletAddress;
@@ -651,13 +649,11 @@ export function LobbyScreen() {
     }
 
     setBlinkChallengeBusy(true);
-    setBlinkChallengeNotice({ text: "Opening Phantom. Please sign to fund the challenge...", tone: "success" });
+    setBlinkChallengeNotice({ text: "Opening your wallet. Please sign to fund the challenge...", tone: "success" });
     setBlinkCreateConfirmOpen(false);
     setBlinkChallengeNotice(null);
     try {
       const snapshot = await createBlinkChallengeSession({
-        connection,
-        wallet,
         walletAddress,
         tokenMint: selectedArena.token,
         wagerAmount,
@@ -683,7 +679,6 @@ export function LobbyScreen() {
       setBlinkChallengeBusy(false);
     }
   }, [
-    connection,
     hasBlockingBlinkChallenge,
     selectedArena,
     selectedScientist,
@@ -692,7 +687,6 @@ export function LobbyScreen() {
     setBlinkChallengeBusy,
     setBlinkChallengeNotice,
     setBlinkChallengePanelOpen,
-    wallet,
     walletAddress,
   ]);
 
@@ -918,11 +912,11 @@ export function LobbyScreen() {
         roomType: "bot",
         isGuest: true,
         isTutorial: true,
-        arenaId: "sol",
+        arenaId: "eth",
         scientistId: selectedScientist.id,
         status: "playing",
-        token: "SOL",
-        arenaToken: "SOL",
+        token: "ETH",
+        arenaToken: "ETH",
         wagerUsd: FIXED_WAGER_USD,
       });
 
@@ -1009,11 +1003,12 @@ export function LobbyScreen() {
     setMatchedRoomId(null);
     setMatchedRole(null);
     setPhase("waiting");
-    queueSocket.connect(walletAddress);
+    queueSocket.connect(walletAddress, selectedArena?.token ?? "ETH");
   }, [
     hasBlockingBlinkChallenge,
     isGuestMode,
     queueSocket,
+    selectedArena,
     startBotMatch,
     walletAddress,
     setActiveMatchToast,
@@ -1705,7 +1700,7 @@ export function LobbyScreen() {
             </p>
             <p className="mt-2 font-caprasimo text-4xl leading-none text-[#4d2a18]">Create Blink challenge?</p>
             <p className="mt-3 font-gabarito text-sm text-[rgba(58,37,24,0.86)]">
-              CORA will open Phantom next so you can fund the Blink challenge. Confirm the setup first to avoid the wallet popup feeling abrupt.
+              CORA will open your wallet next so you can fund the challenge. Confirm the setup first to avoid the wallet popup feeling abrupt.
             </p>
 
             <div className="mt-4 grid gap-2 sm:grid-cols-3">
@@ -1747,9 +1742,9 @@ export function LobbyScreen() {
                 {blinkChallengeBusy ? (
   <span className="flex items-center gap-2">
     <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-    Opening Phantom...
+    Opening wallet...
   </span>
-) : "Confirm And Open Phantom"}
+) : "Confirm And Open Wallet"}
               </button>
             </div>
           </div>

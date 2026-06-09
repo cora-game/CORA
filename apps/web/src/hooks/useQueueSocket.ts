@@ -20,7 +20,7 @@ interface UseQueueSocketReturn {
   /** Match result once found (null while waiting) */
   matchResult: MatchFoundResult | null;
   /** Connect to the queue WS and start matchmaking */
-  connect: (address: string) => void;
+  connect: (address: string, token?: string) => void;
   /** Cancel matchmaking and close the WS */
   cancel: () => void;
 }
@@ -44,6 +44,7 @@ export function useQueueSocket(): UseQueueSocketReturn {
   const [matchResult, setMatchResult] = useState<MatchFoundResult | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const addressRef = useRef<string | null>(null);
+  const tokenRef = useRef<string>('ETH');
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const intentionalCloseRef = useRef(false);
@@ -81,7 +82,7 @@ export function useQueueSocket(): UseQueueSocketReturn {
     cleanup();
     intentionalCloseRef.current = false;
 
-    const socketUrl = `${wsBaseUrl}/queue?address=${encodeURIComponent(address)}`;
+    const socketUrl = `${wsBaseUrl}/queue?address=${encodeURIComponent(address)}&token=${encodeURIComponent(tokenRef.current)}`;
     console.info('[useQueueSocket] Opening connection to', socketUrl);
     const ws = new WebSocket(socketUrl);
     socketRef.current = ws;
@@ -180,8 +181,9 @@ export function useQueueSocket(): UseQueueSocketReturn {
     openSocketRef.current = openSocket;
   }, [openSocket]);
 
-  const connect = useCallback((address: string) => {
+  const connect = useCallback((address: string, token: string = 'ETH') => {
     addressRef.current = address;
+    tokenRef.current = token || 'ETH';
     reconnectAttemptsRef.current = 0;
     setMatchResult(null);
     setQueueStatus(null);

@@ -1,10 +1,13 @@
 import type { QueueStatusData, WsMessage } from '@shared/websocket';
+import { resolveToken, SUPPORTED_TOKENS } from '@shared/escrow';
 import type { RoomManager } from '../RoomManager';
 import type { RoomSocket } from './types';
 import type { Room } from './types';
 
 interface QueueItem {
   address: string;
+  /** Wager token symbol ("ETH" | "USDC") — players only match within the same token pool. */
+  token: string;
   ws?: RoomSocket;
   /** The /queue WebSocket (separate from room WS) — used for queue status events */
   queueWs?: RoomSocket;
@@ -13,6 +16,11 @@ interface QueueItem {
   enqueuedAt: number;
   ttlHandle?: ReturnType<typeof setTimeout>;
   graceHandle?: ReturnType<typeof setTimeout>;
+}
+
+/** Normalize a token symbol; defaults to ETH. */
+function normalizeToken(token: string | undefined | null): string {
+  return resolveToken(token)?.symbol ?? 'ETH';
 }
 
 export class Queue {
@@ -55,7 +63,8 @@ export class Queue {
     });
   }
 
-  public async queueMatch(address: string, signal?: AbortSignal): Promise<string> {
+  public async queueMatch(address: string, token?: string, signal?: AbortSignal): Promise<string> {
+    const tokenSymbol = normalizeToken(token);
     await this.releaseUnfundedPublicDepositRoom(address);
     if (signal?.aborted) return '__aborted__';
 
@@ -78,14 +87,16 @@ export class Queue {
       });
     }
 
-    const opponentIndex = this.queue.findIndex((item) => item.address !== address && item.connected);
+    const opponentIndex = this.queue.findIndex(
+      (item) => item.address !== address && item.connected && item.token === tokenSymbol,
+    );
     if (opponentIndex !== -1) {
       const playerAEntry = this.queue[opponentIndex];
       if (!playerAEntry) {
         throw new Error('Queue opponent disappeared before match creation');
       }
 
-      const { roomId } = await this.createPersistedPublicMatch(playerAEntry.address, address);
+      const { roomId } = await this.createPersistedPublicMatch(playerAEntry.address, address, tokenSymbol);
       const removed = this.queue.splice(opponentIndex, 1)[0];
       if (!removed || removed.address !== playerAEntry.address) {
         await this.manager.queueMatches.markAbandoned(roomId, 'queue_race_opponent_changed');
@@ -93,8 +104,8 @@ export class Queue {
       }
 
       this.clearQueueTimers(removed);
-      this.createPublicRoomFromPersistedMatch(roomId, removed.address, address);
-      this.printQueueState('MATCH FOUND', `${this.shortAddr(playerAEntry.address)} vs ${this.shortAddr(address)} -> ${roomId}`);
+      this.createPublicRoomFromPersistedMatch(roomId, removed.address, address, tokenSymbol);
+      this.printQueueState('MATCH FOUND', `${this.shortAddr(playerAEntry.address)} vs ${this.shortAddr(address)} (${tokenSymbol}) -> ${roomId}`);
 
       removed.resolve(roomId, address);
       return roomId;
@@ -103,6 +114,7 @@ export class Queue {
     return new Promise((resolve) => {
       const queueItem: QueueItem = {
         address,
+        token: tokenSymbol,
         connected: true,
         resolve,
         enqueuedAt: Date.now(),
@@ -125,7 +137,8 @@ export class Queue {
    * this pushes real-time events (queueJoined, queueStatus, matchFound)
    * over the provided /queue WebSocket.
    */
-  public async queueMatchWs(address: string, queueWs: RoomSocket): Promise<void> {
+  public async queueMatchWs(address: string, queueWs: RoomSocket, token?: string): Promise<void> {
+    const tokenSymbol = normalizeToken(token);
     await this.releaseUnfundedPublicDepositRoom(address);
 
     // Check for active room (reconnect)
@@ -155,8 +168,10 @@ export class Queue {
       return;
     }
 
-    // Try instant match
-    const opponentIndex = this.queue.findIndex((item) => item.address !== address && item.connected);
+    // Try instant match (same token pool only)
+    const opponentIndex = this.queue.findIndex(
+      (item) => item.address !== address && item.connected && item.token === tokenSymbol,
+    );
     if (opponentIndex !== -1) {
       const playerAEntry = this.queue[opponentIndex];
       if (!playerAEntry) {
@@ -169,7 +184,7 @@ export class Queue {
 
       let roomId: string;
       try {
-        const persisted = await this.createPersistedPublicMatch(playerAEntry.address, address);
+        const persisted = await this.createPersistedPublicMatch(playerAEntry.address, address, tokenSymbol);
         roomId = persisted.roomId;
       } catch (err) {
         console.error('[Queue] Failed to persist public WS match:', err);
@@ -191,8 +206,8 @@ export class Queue {
       }
 
       this.clearQueueTimers(removed);
-      const room = this.createPublicRoomFromPersistedMatch(roomId, removed.address, address);
-      this.printQueueState('MATCH FOUND (WS)', `${this.shortAddr(removed.address)} vs ${this.shortAddr(address)} -> ${roomId}`);
+      const room = this.createPublicRoomFromPersistedMatch(roomId, removed.address, address, tokenSymbol);
+      this.printQueueState('MATCH FOUND (WS)', `${this.shortAddr(removed.address)} vs ${this.shortAddr(address)} (${tokenSymbol}) -> ${roomId}`);
 
       removed.resolve(roomId, address);
 
@@ -209,6 +224,7 @@ export class Queue {
     // No opponent — add to queue and wait
     const queueItem: QueueItem = {
       address,
+      token: tokenSymbol,
       queueWs,
       connected: true,
       resolve: (roomId: string, opponentAddress?: string) => {
@@ -331,29 +347,54 @@ export class Queue {
     return true;
   }
 
-  private async createPersistedPublicMatch(playerA: string, playerB: string): Promise<{ roomId: string }> {
+  private async createPersistedPublicMatch(
+    playerA: string,
+    playerB: string,
+    token: string,
+  ): Promise<{ roomId: string }> {
     const roomId = this.createPublicRoomId();
     await this.manager.queueMatches.create({
       id: roomId,
       playerA,
       playerB,
-      tokenMint: null,
-      wagerAmount: 0n,
+      tokenMint: token,
+      wagerAmount: this.wagerForToken(token),
     });
     return { roomId };
   }
 
-  private createPublicRoomFromPersistedMatch(roomId: string, playerA: string, playerB: string): Room {
+  private createPublicRoomFromPersistedMatch(
+    roomId: string,
+    playerA: string,
+    playerB: string,
+    token: string,
+  ): Room {
     const room = this.manager.store.createRoom(roomId);
     room.roomType = 'public';
     room.queueMatchPersisted = true;
     room.playerA = playerA;
     room.playerB = playerB;
     room.status = 'depositing';
+    room.tokenMint = token;
+    room.wagerAmount = this.wagerForToken(token);
     this.manager.store.trackPlayer(playerA, roomId);
     this.manager.store.trackPlayer(playerB, roomId);
     this.manager.lifecycle.armDepositTimeout(room, playerA);
+    // Create the match on-chain so both players can deposit (fire-and-forget).
+    this.manager.blockchain.initializeOnChainMatch(room);
+    this.manager.blockchain.fetchWagerEth(room);
     return room;
+  }
+
+  /**
+   * Per-token default wager (base units). ETH overridable via DEFAULT_WAGER_WEI,
+   * USDC via DEFAULT_WAGER_USDC; otherwise the registry default.
+   */
+  private wagerForToken(token: string): bigint {
+    const info = resolveToken(token) ?? SUPPORTED_TOKENS.ETH;
+    if (info.symbol === 'ETH' && process.env.DEFAULT_WAGER_WEI) return BigInt(process.env.DEFAULT_WAGER_WEI);
+    if (info.symbol === 'USDC' && process.env.DEFAULT_WAGER_USDC) return BigInt(process.env.DEFAULT_WAGER_USDC);
+    return info.defaultWager;
   }
 
   private clearQueueTimers(queueItem: QueueItem): void {

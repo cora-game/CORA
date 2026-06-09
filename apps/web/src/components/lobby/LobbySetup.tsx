@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { useWallet } from "@solana/wallet-adapter-react";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
+import { useAccount } from "wagmi";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { useWalletArenaPlayability } from "@/hooks/useWalletArenaPlayability";
 import type { Arena } from "./LobbyScreen";
 
@@ -45,29 +45,22 @@ function getServerHydrationSnapshot() {
 }
 
 function ArenaIcon({ token, active }: { token: string; active: boolean }) {
-  const color = active ? "#4d2a18" : "var(--tone-bark)";
-  if (token === "SOL") {
-    const solColor = active ? "#214335" : "#4f6f5b";
+  if (token === "ETH") {
+    const ethColor = active ? "#214335" : "#4f6f5b";
+    // Ethereum diamond.
     return (
-      <svg width="20" height="20" viewBox="0 0 35 30" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ color: solColor }}>
-        <path d="M6.3 0L0 6.3h28.7l6.3-6.3H6.3zm28.7 11.8L28.7 18.2H0l6.3-6.4h28.7zm-28.7 12L0 30h28.7l6.3-6.3H6.3z" fill="currentColor" />
+      <svg width="18" height="22" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ color: ethColor }}>
+        <path d="M12 0 3 15l9 5 9-5L12 0Z" fill="currentColor" opacity="0.85" />
+        <path d="M12 22 3 17l9 13 9-13-9 5Z" fill="currentColor" />
       </svg>
     );
   }
-  if (token === "MEW") {
-    const mewColor = active ? "#1f3c3f" : "#3C5C5F";
-    return (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ color: mewColor }}>
-        <path
-          d="M6.5 9 4.8 5.2a.6.6 0 0 1 .94-.7L9 7.2c.9-.4 1.95-.7 3-.7 1.08 0 2.12.26 3.03.72l3.24-2.73a.6.6 0 0 1 .94.7L17.5 9c1.55 1.44 2.5 3.47 2.5 5.74C20 19.31 16.42 22 12 22s-8-2.69-8-7.26C4 12.47 4.95 10.44 6.5 9Z"
-          fill="currentColor"
-        />
-      </svg>
-    );
-  }
+  // USDC (default): blue circle with a dollar glyph.
+  const usdcColor = active ? "#27407f" : "#5b8def";
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ color }}>
-      <path d="M12 8.5c-1.5 0-2.8-1.5-3-3.2C8.8 3.5 10.2 2 12 2s3.2 1.5 3 3.3c-.2 1.7-1.5 3.2-3 3.2zM6.5 11.5c-1.2 0-2.4-1.2-2.5-2.8C3.8 7 5 6 6.5 6s2.5 1 2.5 2.7c-.1 1.6-1.3 2.8-2.5 2.8zM17.5 11.5c-1.2 0-2.4-1.2-2.5-2.8C14.8 7 16 6 17.5 6s2.5 1 2.5 2.7c-.1 1.6-1.3 2.8-2.5 2.8zM12 11c2.5 0 4.5 2 5.5 4.5.2.5.5 1 .5 1.5C18 19 15.5 22 12 22s-6-3-6-5c0-.5.3-1 .5-1.5C7.5 13 9.5 11 12 11z" fill="currentColor" />
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ color: usdcColor }}>
+      <circle cx="12" cy="12" r="11" fill="currentColor" />
+      <text x="12" y="17" textAnchor="middle" fontSize="14" fontWeight="700" fill="#ffffff" fontFamily="sans-serif">$</text>
     </svg>
   );
 }
@@ -141,8 +134,9 @@ export function LobbySetup({
   onTryFreeTutorial,
   onReplayIntro,
 }: LobbySetupProps) {
-  const { wallet: selectedWallet, connect, connecting } = useWallet();
-  const { setVisible: setWalletModalVisible } = useWalletModal();
+  const { status: walletStatus } = useAccount();
+  const { openConnectModal } = useConnectModal();
+  const connecting = walletStatus === "connecting" || walletStatus === "reconnecting";
   const [walletBusy, setWalletBusy] = useState(false);
   const mounted = useSyncExternalStore(
     subscribeToHydration,
@@ -150,27 +144,15 @@ export function LobbySetup({
     getServerHydrationSnapshot,
   );
 
-  const ARENA_ASSET_VERSION = "2026-05-12-arena-refresh-1";
-  const COMING_SOON_ARENA_ID = "mew";
-  const COMING_SOON_ARENA_IDS = new Set(["bonk", COMING_SOON_ARENA_ID]);
+  const ARENA_ASSET_VERSION = "2026-06-10-base-eth-usdc";
   const NULL_ARENA_IMAGE_URL = `/assets/arena/null.png?v=${ARENA_ASSET_VERSION}`;
-  const SOL_ARENA_IMAGE_URL = `/assets/arena/sol.png?v=${ARENA_ASSET_VERSION}`;
-  const BONK_ARENA_IMAGE_URL = `/assets/arena/bonk.png?v=${ARENA_ASSET_VERSION}`;
-  const MEW_ARENA_IMAGE_URL = `/assets/arena/mew.png?v=${ARENA_ASSET_VERSION}`;
+  const ETH_ARENA_IMAGE_URL = `/assets/arena/eth.png?v=${ARENA_ASSET_VERSION}`;
+  const USDC_ARENA_IMAGE_URL = `/assets/arena/usdc.png?v=${ARENA_ASSET_VERSION}`;
   const selectedArena = arenas.find((arena) => arena.id === selectedArenaId) ?? null;
-  const mewArena = {
-    id: COMING_SOON_ARENA_ID,
-    token: "MEW",
-    label: "MEW Arena",
-    accent: "#b6afa1",
-    frame: "#3C5C5F",
-    previewBg:
-      "radial-gradient(circle at 22% 24%, rgba(218,212,203,0.42), transparent 48%), radial-gradient(circle at 75% 78%, rgba(149,141,128,0.24), transparent 44%), linear-gradient(150deg, #f3efe7 0%, #ddd6ca 58%, #cbc3b7 100%)",
-  } satisfies Arena;
-  const selectedArenaDisplay = selectedArena ?? (selectedArenaId === COMING_SOON_ARENA_ID ? mewArena : null);
-  const comingSoonArenaVisible = selectedArenaId !== null && COMING_SOON_ARENA_IDS.has(selectedArenaId);
-  const actionDisabled = !mounted || comingSoonArenaVisible || !walletConnected || !canPlay;
-  const actionLabel = comingSoonArenaVisible ? "Coming Soon" : "Pick Scientist";
+  const selectedArenaDisplay = selectedArena;
+  const comingSoonArenaVisible = false;
+  const actionDisabled = !mounted || !walletConnected || !canPlay;
+  const actionLabel = "Pick Scientist";
   const guestAddressLabel = guestAddress ? `Guest ${truncateWallet(guestAddress)}` : "Guest";
   const identityLabel = !mounted
     ? "Wallet not connected"
@@ -180,12 +162,10 @@ export function LobbySetup({
         ? truncateWallet(walletAddress)
         : "Wallet not connected";
   let arenaImageUrl = NULL_ARENA_IMAGE_URL;
-  if (selectedArenaDisplay?.token === "SOL") {
-    arenaImageUrl = SOL_ARENA_IMAGE_URL;
-  } else if (selectedArenaDisplay?.token === "BONK") {
-    arenaImageUrl = BONK_ARENA_IMAGE_URL;
-  } else if (selectedArenaDisplay?.token === "MEW") {
-    arenaImageUrl = MEW_ARENA_IMAGE_URL;
+  if (selectedArenaDisplay?.token === "ETH") {
+    arenaImageUrl = ETH_ARENA_IMAGE_URL;
+  } else if (selectedArenaDisplay?.token === "USDC") {
+    arenaImageUrl = USDC_ARENA_IMAGE_URL;
   }
   const [displayedArenaImageUrl, setDisplayedArenaImageUrl] = useState<string>(arenaImageUrl);
   const [loadedArenaImageUrls, setLoadedArenaImageUrls] = useState<Record<string, true>>({
@@ -198,26 +178,13 @@ export function LobbySetup({
   const { playability, loading, error } = useWalletArenaPlayability({
     address: walletConnected ? walletAddress : "",
     arenaId: selectedArena?.id ?? "",
-    token: selectedArena?.token ?? "SOL",
+    token: selectedArena?.token ?? "ETH",
     enabled: playabilityEnabled,
   });
 
-  async function openWalletEntry() {
+  function openWalletEntry() {
     if (walletBusy || connecting) return;
-
-    if (!selectedWallet) {
-      setWalletModalVisible(true);
-      return;
-    }
-
-    setWalletBusy(true);
-    try {
-      await connect();
-    } catch {
-      // Wallet cancellation should keep the player in the lobby without breaking setup.
-    } finally {
-      setWalletBusy(false);
-    }
+    openConnectModal?.();
   }
 
   const tokenBalanceValue = !selectedArenaDisplay
@@ -236,7 +203,7 @@ export function LobbySetup({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const preloads = [NULL_ARENA_IMAGE_URL, SOL_ARENA_IMAGE_URL, BONK_ARENA_IMAGE_URL, MEW_ARENA_IMAGE_URL];
+    const preloads = [NULL_ARENA_IMAGE_URL, ETH_ARENA_IMAGE_URL, USDC_ARENA_IMAGE_URL];
     for (const url of preloads) {
       const image = new window.Image();
       image.onload = () => {
@@ -247,7 +214,7 @@ export function LobbySetup({
       };
       image.src = url;
     }
-  }, [BONK_ARENA_IMAGE_URL, MEW_ARENA_IMAGE_URL, NULL_ARENA_IMAGE_URL, SOL_ARENA_IMAGE_URL]);
+  }, [ETH_ARENA_IMAGE_URL, USDC_ARENA_IMAGE_URL, NULL_ARENA_IMAGE_URL]);
 
   useEffect(() => {
     if (!incomingArenaImageUrl || typeof window === "undefined") return;
@@ -361,13 +328,13 @@ export function LobbySetup({
           <div className="lobby-setup-arena-list flex flex-row gap-2 sm:flex-col sm:gap-0 sm:space-y-3">
             {arenas.map((arena) => {
               const active = selectedArenaId === arena.id;
-              const flavor = arena.token === "SOL" ? "The Classic Arena" : "Meme Battleground";
+              const flavor = arena.token === "ETH" ? "Native ETH Arena" : "Stablecoin Arena";
               const checkStyle =
-                arena.token === "BONK"
+                arena.token === "USDC"
                   ? {
-                      border: "1px solid rgba(111,58,40,0.48)",
-                      background: "#f8d694",
-                      color: "#6f3a28",
+                      border: "1px solid rgba(39,64,127,0.48)",
+                      background: "#cfe0fb",
+                      color: "#27407f",
                     }
                   : {
                       border: "1px solid rgba(17,44,35,0.45)",
@@ -386,9 +353,9 @@ export function LobbySetup({
                   style={{
                     border: `2.5px solid ${active ? arena.accent : "rgba(111,58,40,0.28)"}`,
                     background: active
-                      ? arena.token === "SOL"
+                      ? arena.token === "ETH"
                         ? "linear-gradient(180deg, #eef6ec 0%, #d2e2cd 100%)"
-                        : "linear-gradient(180deg, #fff1cf 0%, #f8d694 100%)"
+                        : "linear-gradient(180deg, #eef3fb 0%, #c9d8ef 100%)"
                       : "linear-gradient(180deg, #fffaf0 0%, #efe3c8 100%)",
                     boxShadow: active
                       ? `0 8px 0 rgba(111,58,40,0.22), 0 14px 24px ${arena.accent}55`
@@ -425,63 +392,6 @@ export function LobbySetup({
                 </button>
               );
             })}
-            <button
-              type="button"
-              onClick={() => onSelectArena(COMING_SOON_ARENA_ID)}
-              className={`frame-cut lobby-setup-arena-option relative w-full px-3 py-2.5 text-left transition-all duration-200 sm:px-4 sm:py-3 ${
-                selectedArenaId === COMING_SOON_ARENA_ID ? "-translate-y-1 shadow-lg" : "opacity-85 hover:-translate-y-0.5"
-              }`}
-              style={{
-                border: `2.5px solid ${
-                  selectedArenaId === COMING_SOON_ARENA_ID ? "#85A1A5" : "rgba(111,58,40,0.28)"
-                }`,
-                background:
-                  selectedArenaId === COMING_SOON_ARENA_ID
-                    ? "linear-gradient(180deg, #c8d8da 0%, #9db8bc 45%, #85A1A5 100%)"
-                    : "linear-gradient(180deg, #fffaf0 0%, #efe3c8 100%)",
-                boxShadow:
-                  selectedArenaId === COMING_SOON_ARENA_ID
-                    ? "0 8px 0 rgba(60,92,95,0.24), 0 14px 24px rgba(60,92,95,0.22)"
-                    : "0 5px 0 rgba(111,58,40,0.14), 0 10px 20px rgba(111,58,40,0.08)",
-              }}
-            >
-              <div className="flex flex-col items-center justify-center gap-1 sm:flex-row sm:justify-start sm:gap-2.5">
-                <div
-                  className="lobby-setup-arena-token-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow-inner sm:h-10 sm:w-10"
-                  style={{
-                    background:
-                      selectedArenaId === COMING_SOON_ARENA_ID
-                        ? "linear-gradient(180deg, #c8d8da 0%, #9db8bc 45%, #85A1A5 100%)"
-                        : mewArena.previewBg,
-                    border: `1.5px solid ${selectedArenaId === COMING_SOON_ARENA_ID ? "#3C5C5F" : mewArena.accent}`,
-                  }}
-                >
-                  <ArenaIcon token="MEW" active={selectedArenaId === COMING_SOON_ARENA_ID} />
-                </div>
-                <div className="text-center sm:text-left">
-                  <p
-                    className="font-gabarito text-sm font-bold tracking-wide sm:text-base"
-                    style={{ color: selectedArenaId === COMING_SOON_ARENA_ID ? "#173235" : "var(--tone-bark)" }}
-                  >
-                    MEW
-                  </p>
-                  <p
-                    className="font-gabarito text-[9px] uppercase tracking-wide sm:text-[10px]"
-                    style={{ color: selectedArenaId === COMING_SOON_ARENA_ID ? "rgba(23,50,53,0.76)" : "var(--warm-text)" }}
-                  >
-                    Meme Battleground
-                  </p>
-                </div>
-              </div>
-              {selectedArenaId === COMING_SOON_ARENA_ID && (
-                <div
-                  className="lobby-setup-arena-check"
-                  style={{ border: "1px solid rgba(60,92,95,0.45)", background: "rgba(248,250,248,0.75)", color: "#173235" }}
-                >
-                  {"\u2713"}
-                </div>
-              )}
-            </button>
             <button
               type="button"
               disabled
@@ -616,7 +526,7 @@ export function LobbySetup({
                   walletBusy || connecting ? "cursor-not-allowed opacity-60" : ""
                 }`}
               >
-                {walletBusy || connecting ? "Connecting..." : selectedWallet ? "Connect Wallet" : "Select Wallet"}
+                {walletBusy || connecting ? "Connecting..." : "Connect Wallet"}
               </button>
             )}
           </div>

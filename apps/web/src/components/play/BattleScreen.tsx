@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useAnimationControls } from "framer-motion";
-import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+import { useAccount } from "wagmi";
 import type { Card, CharacterState, GameStatus } from "@shared/websocket";
 import { useMatchSocket } from "../../hooks/useMatchSocket";
 import { MatchContextMissingState, WalletRequiredState } from "./BattleScreenGateStates";
@@ -248,11 +248,9 @@ export function BattleScreen() {
   const arenaIdParam = searchParams.get("arena");
   const [activeMatchSession, setActiveMatchSession] = useState<ActiveMatchSession | null>(null);
   const [matchSessionHydrated, setMatchSessionHydrated] = useState(false);
-  const { connection } = useConnection();
-  const wallet = useWallet();
-  const { publicKey } = wallet;
+  const { address: publicKey } = useAccount();
 
-  const connectedWalletAddress = publicKey?.toBase58() ?? "";
+  const connectedWalletAddress = publicKey ?? "";
   const matchSessionAddress = getMatchSessionAddress(activeMatchSession);
   const roomMatchesSession = Boolean(roomIdParam && activeMatchSession?.roomId === roomIdParam);
   const guestMatchesSession = isGuestBotMatchSession(activeMatchSession) && Boolean(matchSessionAddress);
@@ -948,7 +946,7 @@ export function BattleScreen() {
   const settlementPayload = settlementResult
     ? {
       matchId: settlementResult.matchId,
-      serverPublicKey: settlementResult.serverPublicKey,
+      serverAddress: settlementResult.serverAddress,
       settlementSignature: settlementResult.settlementSignature,
     }
     : null;
@@ -1604,8 +1602,6 @@ export function BattleScreen() {
     setShareNotice(null);
     try {
       const snapshot = await createBlinkChallengeSession({
-        connection,
-        wallet,
         walletAddress: connectedWalletAddress,
         tokenMint: arenaToken,
         wagerAmount,

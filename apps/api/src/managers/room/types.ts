@@ -1,4 +1,5 @@
 import type { GameStatus } from '@shared/websocket';
+import type { Hex } from 'viem';
 import { GameEngine } from '@cora/game-logic';
 
 export type RoomType = 'public' | 'private' | 'bot';
@@ -26,43 +27,10 @@ export interface OpenedCard {
   timeoutHandle: ReturnType<typeof setTimeout> | null;
 }
 
-/** Registry entry for a single card registered on the ER session */
-export interface ErRegisteredCard {
-  cardPda: string;
-  owner: string;
-  cardId: string;
-  effectType: number;
-  maxValue: number;
-  isDelegated: boolean;
-  isConsumed: boolean;
-}
-
-/** ER lifecycle status tracked on the room */
-export type ErLifecycleStatus =
-  | 'none'           // ER not enabled or not yet started
-  | 'creating'       // createSession in progress
-  | 'registering'    // registerCardV2 calls in progress
-  | 'activating'     // activateSession in progress
-  | 'delegating'     // delegation in progress
-  | 'active'         // session fully delegated, ready for gameplay
-  | 'committing'     // commit/undelegate in progress (terminal)
-  | 'finished'       // terminal — ER session committed
-  | 'failed';        // setup or runtime ER error; fallback to engine-only
-
-/** Proof metadata stored for API responses */
-export interface ErProofMeta {
-  sessionPda: string;
-  setupTxSignatures: string[];
-  terminalTxSignatures: string[];
-  status: string | null;
-  winner: string | null;
-  endReason: number | null;
-}
-
 export interface Room {
   id: string;
-  /** 32-byte match ID derived from room ID — used for on-chain PDA derivation */
-  matchIdBytes: Uint8Array;
+  /** 0x bytes32 match id derived from room id — the on-chain CoraEscrow match key. */
+  matchId: Hex;
   clients: Map<string, RoomClient>;
   status: GameStatus;
   playerMeta: Map<string, ServerPlayerMeta>;
@@ -78,29 +46,16 @@ export interface Room {
   playerB: string | null;
   /** Server-controlled opponent address for bot practice matches. */
   botAddress: string | null;
-  /** Whether Player B has been sent their deposit_wager transaction yet (sequential unlock) */
+  /** Whether Player B has been sent their deposit unlock yet (sequential unlock) */
   playerBUnlocked: boolean;
-  /** SPL token mint for this match — stored server-side, never derived from client input */
+  /** Vestigial token identifier — always "ETH" on Base Sepolia (native wager). */
   tokenMint: string | null;
-  /** Wager amount in token base units (e.g. USDC: 1 USDC = 1_000_000) */
+  /** Per-player wager amount, in wei. */
   wagerAmount: bigint | null;
-  /** Per-player 20s shot clocks during the deposit phase */
+  /** Per-player 30s shot clocks during the deposit phase */
   depositTimeouts: Map<string, ReturnType<typeof setTimeout>>;
-  /** Ephemeral Rollup session PDA (set when MagicBlock is enabled) */
-  erSessionPda: string | null;
-  /** USD value of the wager */
-  wagerUsdValue?: string | null;
-  /** Blink creator response deadline for private soft-commitment rooms */
+  /** Human-readable ETH value of the wager. */
+  wagerEthValue?: string | null;
+  /** Challenge creator response deadline for private soft-commitment rooms */
   blinkJoinDeadline?: number | null;
-
-  /** Whether this room uses ER as the authoritative source of truth */
-  erEnabled: boolean;
-  /** Current ER lifecycle phase */
-  erLifecycleStatus: ErLifecycleStatus;
-  /** Per-card ER registry, keyed by `<playerAddress>:<engineCardId>` */
-  erCardRegistry: Map<string, ErRegisteredCard>;
-  /** Monotonic compact ID source for lazily registered replacement cards */
-  erNextCardNonce: number;
-  /** Proof metadata for the /proof API endpoint */
-  erProofMeta: ErProofMeta | null;
 }

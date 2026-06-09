@@ -1,27 +1,19 @@
 "use client";
 
-import dynamic from "next/dynamic";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 type HydratedWalletButtonProps = {
   className?: string;
 };
 
-const ClientWalletMultiButton = dynamic(
-  async () => (await import("@solana/wallet-adapter-react-ui")).WalletMultiButton,
-  {
-    ssr: false,
-    loading: () => (
-      <button
-        type="button"
-        disabled
-        className="wallet-adapter-button wallet-adapter-button-trigger"
-      >
-        Connect Wallet
-      </button>
-    ),
-  },
-);
-
+/**
+ * Wallet connect button. RainbowKit's ConnectButton handles connect/disconnect,
+ * network switching, and the wallet modal (MetaMask / Coinbase Wallet / WalletConnect).
+ */
 export function HydratedWalletButton({ className }: HydratedWalletButtonProps) {
-  return <ClientWalletMultiButton className={className} />;
+  return (
+    <div className={className}>
+      <ConnectButton accountStatus="address" chainStatus="icon" showBalance={false} />
+    </div>
+  );
 }

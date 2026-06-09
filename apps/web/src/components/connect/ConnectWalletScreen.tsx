@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useWallet } from "@solana/wallet-adapter-react";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-import { Keypair } from "@solana/web3.js";
+import { useAccount, useDisconnect } from "wagmi";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { IntroOverlay } from "@/components/lobby/IntroOverlay";
 
 const GUEST_ADDRESS_STORAGE_KEY = "cora:guest-address";
@@ -28,8 +28,15 @@ function writeStoredGuestAddress(address: string) {
 export function ConnectWalletScreen() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { publicKey, wallet, connect, disconnect, connecting, disconnecting } = useWallet();
-  const { setVisible: setWalletModalVisible } = useWalletModal();
+  const { address: connectedAddress, isConnected, status } = useAccount();
+  const { disconnect } = useDisconnect();
+  const { openConnectModal } = useConnectModal();
+  // Wallet state isn't known during SSR; gate it on mount to avoid a hydration
+  // mismatch (wagmi reports "reconnecting" on the client's first render).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const connecting = mounted && (status === "connecting" || status === "reconnecting");
+  const disconnecting = false;
   const [guestBusy, setGuestBusy] = useState(false);
   const [walletBusy, setWalletBusy] = useState(false);
   const [introOverlayOpen, setIntroOverlayOpen] = useState(() => {
@@ -40,8 +47,8 @@ export function ConnectWalletScreen() {
       return false;
     }
   });
-  const connected = Boolean(publicKey);
-  const address = publicKey?.toBase58() ?? "";
+  const connected = mounted && isConnected && Boolean(connectedAddress);
+  const address = connectedAddress ?? "";
 
   const nextPath = useMemo(() => {
     const next = searchParams.get("next");
@@ -62,26 +69,15 @@ export function ConnectWalletScreen() {
   function enterAsGuest() {
     if (guestBusy) return;
     setGuestBusy(true);
-    writeStoredGuestAddress(Keypair.generate().publicKey.toBase58());
+    // Guest mode generates a throwaway EVM address (bot practice only — it can't
+    // be funded, so it cannot enter wager matches).
+    writeStoredGuestAddress(privateKeyToAccount(generatePrivateKey()).address);
     router.push("/lobby?guest=1");
   }
 
-  async function connectWallet() {
+  function connectWallet() {
     if (walletBusy || connecting) return;
-
-    if (!wallet) {
-      setWalletModalVisible(true);
-      return;
-    }
-
-    setWalletBusy(true);
-    try {
-      await connect();
-    } catch {
-      // Wallet cancellation should leave the user on the connect screen without breaking the flow.
-    } finally {
-      setWalletBusy(false);
-    }
+    openConnectModal?.();
   }
 
   return (
@@ -167,7 +163,7 @@ export function ConnectWalletScreen() {
                 <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#f8d694]" />
               </span>
               <span className="font-gabarito text-[10px] font-black uppercase tracking-[0.16em] text-[#f8d694]">
-                Live on Devnet
+                Live on Base Sepolia
               </span>
             </div>
 
@@ -186,7 +182,7 @@ export function ConnectWalletScreen() {
                       {walletBusy || connecting ? "Connecting..." : "Connect Wallet"}
                     </button>
                     <p className="font-gabarito text-[11px] leading-snug text-[#8fa897]">
-                      Full queue, deposits, Blinks, and Solana rewards.
+                      Full queue, deposits, challenges, and on-chain rewards.
                     </p>
                   </div>
 
@@ -202,7 +198,7 @@ export function ConnectWalletScreen() {
                       {guestBusy ? "Opening..." : "Enter As Guest"}
                     </button>
                     <p className="font-gabarito text-[11px] leading-snug text-[#8fa897]">
-                      Try CORA first. No wallet, deposit, or Solana payout.
+                      Try CORA first. No wallet, deposit, or on-chain payout.
                     </p>
                   </div>
                 </div>

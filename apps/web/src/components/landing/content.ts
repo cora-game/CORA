@@ -152,6 +152,6 @@ export type WagerToken = {
 };
 
 export const WAGER_TOKENS: WagerToken[] = [
-  { symbol: "SOL", name: "Solana", icon: "◎", color: "#9945FF" },
-  { symbol: "BONK", name: "Bonk", icon: "🐶", color: "#F7931A" },
+  { symbol: "ETH", name: "Ethereum", icon: "Ξ", color: "#627EEA" },
+  { symbol: "USDC", name: "USD Coin", icon: "$", color: "#2775CA" },
 ];

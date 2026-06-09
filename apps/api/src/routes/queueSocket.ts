@@ -13,7 +13,7 @@ import type { WsMessage } from '@shared/websocket';
  *   5. WS close also removes from queue
  */
 export function createQueueSocketRoute(roomManager: RoomManager) {
-  return (address: string | undefined): WSEvents => {
+  return (address: string | undefined, token?: string): WSEvents => {
     if (!address) {
       return {
         onOpen(_event, ws) {
@@ -28,7 +28,7 @@ export function createQueueSocketRoute(roomManager: RoomManager) {
     return {
       onOpen(_event, ws) {
         queued = true;
-        void roomManager.queue.queueMatchWs(address, ws).catch((err) => {
+        void roomManager.queue.queueMatchWs(address, ws, token).catch((err) => {
           console.error('[QueueWS] Unhandled queueMatchWs failure:', err);
           roomManager.network.safeSend(ws, {
             type: 'queueLeft',

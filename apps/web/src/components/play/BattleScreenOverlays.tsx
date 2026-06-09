@@ -9,7 +9,7 @@ import type { ActiveBlinkChallengeSession } from "@/lib/session/matchSession";
 
 type SettlementPayload = {
   matchId: string;
-  serverPublicKey: string;
+  serverAddress: string;
   settlementSignature: string;
 } | null;
 
@@ -588,7 +588,7 @@ export function BattleScreenOverlays({
                         Match ID: {settlementPayload.matchId}
                       </p>
                       <p className="break-all font-gabarito text-[11px] text-[#5e7768]">
-                        Server Pubkey: {settlementPayload.serverPublicKey}
+                        Server Signer: {settlementPayload.serverAddress}
                       </p>
                       <p className="break-all font-gabarito text-[11px] text-[#5e7768]">
                         Settlement Signature: {settlementPayload.settlementSignature}

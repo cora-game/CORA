@@ -16,8 +16,8 @@ type PanelData = {
 
 const PANELS: PanelData[] = [
   {
-    title: "Set Up Devnet",
-    copy: "Connect your wallet, switch to Solana Devnet, and grab faucet SOL so wager matches can sign safely while you test CORA.",
+    title: "Set Up Base Sepolia",
+    copy: "Connect your wallet, switch to Base Sepolia, and grab faucet ETH (and test USDC) so wager matches can sign safely while you test CORA.",
     assetUrl: "/assets/intro/intro-wallet-devnet.webm",
   },
   {
@@ -294,14 +294,14 @@ function WalletDevnetMockup() {
           <p className="font-gabarito text-[9px] font-black uppercase tracking-[0.18em] text-[#f8d694]">
             Wallet Setup
           </p>
-          <p className="mt-1 font-caprasimo text-lg text-white">Ready For Devnet</p>
+          <p className="mt-1 font-caprasimo text-lg text-white">Ready For Base Sepolia</p>
         </div>
         <motion.div
           animate={{ opacity: [0.55, 1, 0.55] }}
           transition={{ duration: 1.8, repeat: Infinity }}
           className="rounded-full border border-[var(--tone-mint,#cbefc1)]/30 bg-[var(--tone-mint,#cbefc1)]/10 px-3 py-1 font-mono text-[9px] font-bold uppercase tracking-wide text-[var(--tone-mint,#cbefc1)]"
         >
-          Devnet
+          Base Sepolia
         </motion.div>
       </div>
 
@@ -311,7 +311,7 @@ function WalletDevnetMockup() {
             <div className="flex items-center gap-2">
               <div className="h-8 w-8 rounded-full bg-[linear-gradient(145deg,#6f3a28,#f8d694)]" />
               <div>
-                <p className="font-gabarito text-xs font-bold text-white">Phantom Wallet</p>
+                <p className="font-gabarito text-xs font-bold text-white">EVM Wallet</p>
                 <p className="font-mono text-[9px] text-white/45">HpuHN...6YNC</p>
               </div>
             </div>
@@ -323,8 +323,8 @@ function WalletDevnetMockup() {
           <div className="wallet-mockup-steps mt-4 space-y-3">
             {[
               ["Connect wallet", "Done"],
-              ["Switch network", "Devnet"],
-              ["Faucet SOL", "+2 SOL"],
+              ["Switch network", "Base Sepolia"],
+              ["Faucet ETH", "+0.1 ETH"],
             ].map(([label, value], index) => (
               <motion.div
                 key={label}
@@ -655,7 +655,7 @@ function WagerMockup() {
         </div>
         <div className="space-y-0.5 text-[8px] text-white/70 text-left font-gabarito bg-emerald-950/40 p-1 border border-emerald-900/20 rounded">
           <div>· Double your wager</div>
-          <div>· Solana escrows</div>
+          <div>· Base escrows</div>
           <div>· Instant payouts</div>
         </div>
         <div className="text-[8px] font-black uppercase text-[var(--tone-mint)] font-mono tracking-wider">

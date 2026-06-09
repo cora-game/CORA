@@ -1,13 +1,10 @@
 import { deriveMatchId } from '@shared/escrow';
-import { isMagicBlockConfigured } from '../../services/magicblock';
 import { Room } from './types';
 
 export class Store {
   private rooms: Map<string, Room> = new Map();
   /** Reverse index: player wallet address → roomId for O(1) active-room lookups */
   private playerRooms: Map<string, string> = new Map();
-
-  constructor(private defaultErEnabled = isMagicBlockConfigured()) {}
 
   public createRoom(roomId: string): Room {
     if (this.rooms.has(roomId)) {
@@ -16,7 +13,7 @@ export class Store {
 
     const newRoom: Room = {
       id: roomId,
-      matchIdBytes: deriveMatchId(roomId),
+      matchId: deriveMatchId(roomId),
       clients: new Map(),
       status: 'waiting',
       playerMeta: new Map(),
@@ -30,14 +27,8 @@ export class Store {
       tokenMint: null,
       wagerAmount: null,
       depositTimeouts: new Map(),
-      erSessionPda: null,
-      wagerUsdValue: null,
+      wagerEthValue: null,
       blinkJoinDeadline: null,
-      erEnabled: this.defaultErEnabled,
-      erLifecycleStatus: 'none',
-      erCardRegistry: new Map(),
-      erNextCardNonce: 0,
-      erProofMeta: null,
     };
     this.rooms.set(roomId, newRoom);
     return newRoom;

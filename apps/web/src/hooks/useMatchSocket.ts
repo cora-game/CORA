@@ -67,7 +67,7 @@ function isSettlementPayload(value: unknown): value is MatchResultPayload {
     typeof payload.winner === 'string' &&
     typeof payload.matchId === 'string' &&
     typeof payload.settlementSignature === 'string' &&
-    typeof payload.serverPublicKey === 'string'
+    typeof payload.serverAddress === 'string'
   );
 }
 

@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+import { useAccount } from "wagmi";
 import { HydratedWalletButton } from "@/components/wallet/HydratedWalletButton";
 import { BlinkCharacterGate } from "@/components/challenge/BlinkCharacterGate";
 import { BlinkRoomJoiner } from "@/components/challenge/BlinkRoomJoiner";
 import { BlinkSurrenderBridge } from "@/components/challenge/BlinkSurrenderBridge";
-import { getPrivateChallenge, type PrivateChallenge } from "@/lib/matchmaking/privateChallenge";
-import { DepositIntentError, signDepositIntent } from "@/lib/solana/signDepositIntent";
+import { acceptPrivateChallenge, getPrivateChallenge, type PrivateChallenge } from "@/lib/matchmaking/privateChallenge";
+import { DepositIntentError, acceptChallengeTx } from "@/lib/evm/deposit";
 import {
   clearActiveDepositIntent,
   getMatchSessionAddress,
@@ -60,8 +60,7 @@ function classifyError(error: unknown) {
 
 export function BlinkChallengeAccept({ roomId }: BlinkChallengeAcceptProps) {
   const router = useRouter();
-  const { connection } = useConnection();
-  const wallet = useWallet();
+  const { address: walletPublicKey } = useAccount();
   const [challenge, setChallenge] = useState<PrivateChallenge | null>(null);
   const [state, setState] = useState<AcceptState>("loading");
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -69,10 +68,10 @@ export function BlinkChallengeAccept({ roomId }: BlinkChallengeAcceptProps) {
   const [selectedScientistId, setSelectedScientistId] = useState<string | null>(null);
   const [scientistConfirmed, setScientistConfirmed] = useState(false);
   const [surrendering, setSurrendering] = useState(false);
-  const walletAddress = wallet.publicKey?.toBase58() ?? "";
+  const walletAddress = walletPublicKey ?? "";
   const isCreator = Boolean(walletAddress && challenge?.creatorWallet === walletAddress);
   const isAcceptedByWallet = Boolean(walletAddress && challenge?.opponentWallet === walletAddress);
-  const canAccept = Boolean(wallet.publicKey) && challenge?.status === "PENDING" && !isCreator && state !== "signing";
+  const canAccept = Boolean(walletPublicKey) && challenge?.status === "PENDING" && !isCreator && state !== "signing";
   const isTerminalChallenge = challenge?.status ? BLINK_TERMINAL_STATUSES.has(challenge.status) : false;
   const tokenLabel = getTokenLabel(challenge?.tokenMint);
   const arenaLabel = useMemo(() => getArenaLabel(challenge?.tokenMint), [challenge?.tokenMint]);
@@ -135,15 +134,13 @@ export function BlinkChallengeAccept({ roomId }: BlinkChallengeAcceptProps) {
     setState("signing");
     setErrorText(null);
     try {
-      const signature = await signDepositIntent({
-        connection,
-        wallet,
-        roomId,
-        token: challenge.tokenMint,
-        wagerUsd,
-      });
-      setAcceptedSignature(signature);
-      writeActiveDepositIntent({ roomId, address: walletAddress, signature });
+      const wagerWei = BigInt(challenge.wagerAmount || "1000000000000000");
+      // On-chain: match the creator's escrowed wager via acceptChallenge.
+      const txHash = await acceptChallengeTx({ roomId, wagerWei, token: challenge.tokenMint });
+      // Tell the API to record acceptance (verifies the receipt + hydrates the room).
+      await acceptPrivateChallenge({ roomId, address: walletAddress, txHash });
+      setAcceptedSignature(txHash);
+      writeActiveDepositIntent({ roomId, address: walletAddress, signature: txHash });
       setState("accepted");
     } catch (error) {
       setErrorText(classifyError(error));
@@ -268,7 +265,7 @@ export function BlinkChallengeAccept({ roomId }: BlinkChallengeAcceptProps) {
           )}
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
-            {!wallet.publicKey && <HydratedWalletButton />}
+            {!walletPublicKey && <HydratedWalletButton />}
             <button
               type="button"
               onClick={handleBackToLobby}

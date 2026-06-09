@@ -66,20 +66,14 @@ export interface GameState {
   currentRound: number;
   /** Number of rounds needed to win the match */
   roundsToWin: number;
-  /** Token address */
+  /** Vestigial token identifier — always "ETH" on Base Sepolia (native wager). */
   tokenMint: string;
-  /** Wager amount */
+  /** Per-player wager amount, in wei (stringified). */
   wagerAmount: string;
-  /** Wager USD value */
-  wagerUsdValue?: string;
+  /** Wager value in ETH (human-readable), when computed. */
+  wagerEthValue?: string;
   /** Public, private, or bot practice match */
   roomType: 'public' | 'private' | 'bot';
-  /** True when public combat fields are backed by MagicBlock ER authority */
-  erEnabled?: boolean;
-  /** Current ER lifecycle/status for proof-aware clients */
-  erStatus?: string | null;
-  /** MagicBlock battle session PDA when available */
-  erSessionPda?: string | null;
 }
 
 // ─── Card Countdown Pipeline Types ────────────────────────────
@@ -158,12 +152,13 @@ export type ClientToServerEvents = {
 // Settlement result payload sent after match ends
 export interface MatchResultPayload {
   winner: string;
-  /** 32-byte match ID as hex string — use to derive PDA on-chain */
+  /** 32-byte match id as 0x hex — the on-chain matchId key */
   matchId: string;
-  /** Server's ed25519 settlement signature (base58 encoded) */
+  /** Server's EIP-712 settlement signature (0x hex). Settlement is submitted
+   *  server-side; this is informational/auditable for the client. */
   settlementSignature: string;
-  /** Server public key (base58) — matches the one stored in MatchState on-chain */
-  serverPublicKey: string;
+  /** Server signer EVM address — matches `serverSigner` in CoraEscrow. */
+  serverAddress: string;
 }
 
 /** Queue status payload sent on /queue WS */
@@ -217,18 +212,6 @@ export interface MatchResult {
   antiCheatWarning?: boolean; // True if the match was suspicious but still settled
   /** True when this was a practice match against the server bot, with no wager payout/loss. */
   isBotMatch?: boolean;
-  erProof?: ErProofPayload;
-}
-
-export interface ErProofPayload {
-  erSessionPda: string;
-  explorerUrl: string;
-  erEnabled: boolean;
-  status: string | null;
-  winner: string | null;
-  endReason: number | null;
-  setupTxSignatures?: string[];
-  terminalTxSignatures?: string[];
 }
 
 export interface PresenceUpdateData {

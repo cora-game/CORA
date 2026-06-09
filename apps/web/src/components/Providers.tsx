@@ -1,53 +1,48 @@
 "use client";
 
-import { useMemo } from "react";
-import {
-  ConnectionProvider,
-  WalletProvider,
-} from "@solana/wallet-adapter-react";
-import { WalletAdapterNetwork } from "@solana/wallet-adapter-base";
+import { useEffect } from "react";
+import { WagmiProvider, useAccount, useChainId, useSwitchChain } from "wagmi";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
+import "@rainbow-me/rainbowkit/styles.css";
 
-import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
-import { clusterApiUrl } from "@solana/web3.js";
+import { wagmiConfig, baseSepolia } from "@/lib/evm/config";
 
-// Default styles that can be overridden by your app
-import "@solana/wallet-adapter-react-ui/styles.css";
+const queryClient = new QueryClient();
+
+/**
+ * Keeps the connected wallet on Base Sepolia. If the user is connected to any
+ * other network, request a switch automatically (RainbowKit also surfaces a
+ * "Wrong network" button as a fallback if the wallet rejects the switch).
+ */
+function AutoSwitchToBaseSepolia() {
+  const { isConnected } = useAccount();
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
+
+  useEffect(() => {
+    if (isConnected && chainId !== baseSepolia.id) {
+      try {
+        switchChain({ chainId: baseSepolia.id });
+      } catch {
+        // Wallet may reject or not support programmatic switching — the
+        // RainbowKit "Wrong network" button remains available.
+      }
+    }
+  }, [isConnected, chainId, switchChain]);
+
+  return null;
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  // The network can be set to 'devnet', 'testnet', or 'mainnet-beta'.
-  const network = WalletAdapterNetwork.Devnet;
-
-  // Use RPCFast (or any custom RPC) via env var; fall back to public devnet.
-  const endpoint = useMemo(
-    () => process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl(network),
-    [network],
-  );
-
-  const wallets = useMemo(
-    () => [
-      /**
-       * Wallets that implement either of these standards will be available automatically.
-       *
-       *   - Solana Mobile Stack Mobile Wallet Adapter Protocol
-       *     (https://github.com/solana-mobile/mobile-wallet-adapter)
-       *   - Solana Wallet Standard
-       *     (https://github.com/solana-labs/wallet-standard)
-       *
-       * If you wish to support a wallet that supports neither of those standards,
-       * instantiate its legacy wallet adapter here. Common legacy adapters can be found
-       * in the npm package `@solana/wallet-adapter-wallets`.
-       */
-      // No need to manually add Phantom anymore! It is automatically detected via the Wallet Standard.
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [network]
-  );
-
   return (
-    <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>{children}</WalletModalProvider>
-      </WalletProvider>
-    </ConnectionProvider>
+    <WagmiProvider config={wagmiConfig}>
+      <QueryClientProvider client={queryClient}>
+        <RainbowKitProvider theme={darkTheme()} modalSize="compact" initialChain={baseSepolia}>
+          <AutoSwitchToBaseSepolia />
+          {children}
+        </RainbowKitProvider>
+      </QueryClientProvider>
+    </WagmiProvider>
   );
 }

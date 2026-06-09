@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useAccount } from "wagmi";
 import { getArenaHistory, getWalletHistory } from "@/lib/history/historyApi";
 import type { MatchHistoryItem } from "@/lib/history/historyTypes";
 
@@ -64,8 +64,8 @@ function resultBadgeStyle(result?: MatchHistoryItem["result"]) {
 
 export function HistoryView() {
   const searchParams = useSearchParams();
-  const { publicKey } = useWallet();
-  const connectedAddress = publicKey?.toBase58() ?? "";
+  const { address: publicKey } = useAccount();
+  const connectedAddress = publicKey ?? "";
 
   const requestedScope = normalizeScope(searchParams.get("scope"));
   const arenaId = (searchParams.get("arena") ?? "sol").trim().toLowerCase();

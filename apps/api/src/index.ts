@@ -3,7 +3,6 @@ import { cors } from 'hono/cors';
 import { createBunWebSocket } from 'hono/bun';
 import { RoomManager } from './managers/RoomManager';
 import { rateLimiter } from './middleware/rateLimiter';
-import { createActionsRouter } from './routes/actions';
 import { createDiscoveryRouter } from './routes/discovery';
 import { createHealthRouter } from './routes/health';
 import { createHistoryRouter } from './routes/history';
@@ -58,7 +57,6 @@ app.use('/*', rateLimiter);
 // Mounted routers
 app.route('/', createDiscoveryRouter());
 app.route('/', createHealthRouter());
-app.route('/api/actions', createActionsRouter(roomManager));
 app.route('/api/history', createHistoryRouter());
 app.route('/api/matches', createMatchesRouter(roomManager));
 app.route('/api/match', createApiMatchRouter(roomManager));
@@ -77,19 +75,16 @@ app.get('/match/:roomId', upgradeWebSocket((c) => {
 // WebSocket queue route (matchmaking)
 app.get('/queue', upgradeWebSocket((c) => {
   const address = c.req.query('address');
-  return queueSocketRoute(address);
+  const token = c.req.query('token');
+  return queueSocketRoute(address, token);
 }));
 
 // Start the server
 const port = parseInt(process.env.PORT || '8080', 10);
 console.log(`Server is running on port ${port}`);
 
-// Start Anchor event listener when RPC is configured.
-if (process.env.SOLANA_RPC_URL) {
-  startEventListener(process.env.SOLANA_RPC_URL, process.env.SOLANA_WS_URL);
-} else {
-  console.log('[EventListener] Skipped - no SOLANA_RPC_URL configured.');
-}
+// Start CoraEscrow event listener when the contract address is configured.
+startEventListener();
 
 export default {
   port,

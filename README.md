@@ -31,9 +31,9 @@
 
 ## Signal
 
-CORA is a web3 aptitude-battle project built on Solana.
+CORA is a web3 aptitude-battle project built on Base (Base Sepolia testnet).
 
-Players connect a wallet, lock a wager, enter a real-time head-to-head battle, answer timed aptitude questions, and settle the result on-chain. Public queue play and private Blink challenges both feed into the same core battle loop, while MagicBlock can be enabled to mirror live battle state through delegated execution.
+Players connect an EVM wallet, lock a native-ETH wager, enter a real-time head-to-head battle, answer timed aptitude questions, and settle the result on-chain. Public queue play and private challenge links both feed into the same core battle loop. Gameplay is server-authoritative (the game engine); the on-chain `CoraEscrow` contract handles wager custody and settlement.
 
 This repository is the active monorepo for the current CORA implementation.
 
@@ -74,20 +74,20 @@ WebSocket room -> timed questions -> scientist abilities -> best-of-3 rounds -> 
 
 | Layer | Role | Lives In |
 |---|---|---|
-| Money Layer | wager custody, open challenge funding, match activation, settlement verification, refund/reclaim flows | `packages/solana-program` |
-| Battle Layer | real-time battle sessions, delegated state, round effects, timeout resolution, terminal outcomes | `packages/battle-anchor-032` |
-| App Layer | landing, lobby, queue, challenge UX, WebSockets, actions, Blink transaction building, match orchestration | `apps/web`, `apps/api` |
+| Money Layer | wager custody, open challenge funding, match activation, EIP-712 settlement verification, refund/reclaim flows | `packages/contracts/evm` (`CoraEscrow.sol`) |
+| Battle Layer | real-time battle sessions, round effects, timeout resolution, terminal outcomes — server-authoritative | `apps/api` (game engine) |
+| App Layer | landing, lobby, queue, challenge UX, WebSockets, match orchestration | `apps/web`, `apps/api` |
 
-When MagicBlock is enabled, CORA can create battle sessions, commit inline manifests, delegate live battle state, apply round effects, and resolve terminal outcomes through delegated execution.
+Gameplay is server-authoritative: the game engine computes all battle outcomes; the API server signs the EIP-712 settlement and submits it to the escrow contract on Base Sepolia.
 
 ## Tech Stack
 
 | Surface | Stack |
 |---|---|
-| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, Framer Motion, Solana Wallet Adapter, TanStack Query |
-| Backend | Bun, Hono, WebSockets, TypeScript |
-| On-Chain / Web3 | Solana, Anchor, SPL Token, Solana Actions / Blinks, RPCFast, MagicBlock Ephemeral Rollups |
-| Data / Services | Supabase, GoldRush / Covalent |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, Framer Motion, wagmi + viem + RainbowKit, TanStack Query |
+| Backend | Bun, Hono, WebSockets, TypeScript, viem |
+| On-Chain / Web3 | Base Sepolia, Solidity, Foundry, native-ETH escrow, EIP-712 settlement |
+| Data / Services | Supabase |
 
 ## Repo Map
 
@@ -97,11 +97,9 @@ Cora/
 |   |-- api/                  # backend, matchmaking, actions, room runtime
 |   `-- web/                  # frontend app
 |-- packages/
-|   |-- battle-anchor-032/    # MagicBlock-compatible battle program
+|   |-- contracts/evm/        # CoraEscrow.sol (Foundry) — Base Sepolia escrow
 |   |-- game-logic/           # battle engine and anti-cheat heuristics
-|   |-- shared-types/         # shared contracts and escrow constants
-|   |-- solana-client/        # generated IDLs and TS client artifacts
-|   |-- solana-program/       # Solana escrow program
+|   |-- shared-types/         # shared types, escrow constants + ABI (EIP-712)
 |   `-- ui/                   # placeholder shared UI package
 |-- data/
 |   |-- fixtures/
@@ -121,7 +119,7 @@ npm install
 | Step | Action |
 |---|---|
 | 1 | Install dependencies from the repo root with `npm install` |
-| 2 | Configure `apps/api/.env` and `apps/web/.env.local` with Solana / RPCFast, Supabase, and optional MagicBlock settings |
+| 2 | Configure `apps/api/.env` (Base Sepolia RPC, `SERVER_PRIVATE_KEY`, `ESCROW_CONTRACT_ADDRESS`, Supabase) and `apps/web/.env.local` (`NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL`, `NEXT_PUBLIC_ESCROW_ADDRESS`, `NEXT_PUBLIC_WALLETCONNECT_ID`) — see `.env.example` |
 | 3 | Start the backend with `cd apps/api` then `bun run dev` |
 | 4 | Start the frontend in a second terminal with `cd apps/web` then `npm run dev` |
 | 5 | Open `http://localhost:3000` for the web app and `http://localhost:8080` for the backend |

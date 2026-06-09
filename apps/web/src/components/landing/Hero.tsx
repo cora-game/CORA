@@ -68,7 +68,7 @@ const HERO_DUST_PARTICLES: HeroDustParticle[] = [
 ];
 const HERO_TOKENS: HeroToken[] = [
   {
-    src: "/assets/tokens/sol.png",
+    src: "/assets/tokens/eth.svg",
     left: "19%",
     top: "10%",
     width: "clamp(72px, 8vw, 132px)",
@@ -83,7 +83,7 @@ const HERO_TOKENS: HeroToken[] = [
     opacity: 1,
   },
   {
-    src: "/assets/tokens/bonk.png",
+    src: "/assets/tokens/usdc.png",
     left: "15%",
     top: "39%",
     width: "clamp(52px, 5.8vw, 94px)",
@@ -98,7 +98,7 @@ const HERO_TOKENS: HeroToken[] = [
     opacity: 0.88,
   },
   {
-    src: "/assets/tokens/pengu.png",
+    src: "/assets/tokens/eth.svg",
     left: "18%",
     top: "69%",
     width: "clamp(34px, 3.8vw, 60px)",
@@ -113,7 +113,7 @@ const HERO_TOKENS: HeroToken[] = [
     opacity: 0.76,
   },
   {
-    src: "/assets/tokens/mew.png",
+    src: "/assets/tokens/usdc.png",
     left: "81%",
     top: "17%",
     width: "clamp(50px, 5.6vw, 88px)",
@@ -128,7 +128,7 @@ const HERO_TOKENS: HeroToken[] = [
     opacity: 0.84,
   },
   {
-    src: "/assets/tokens/pepe.png",
+    src: "/assets/tokens/eth.svg",
     left: "86%",
     top: "46%",
     width: "clamp(34px, 3.8vw, 60px)",
@@ -249,7 +249,7 @@ const HERO_LAYERS: HeroLayer[] = [
 
 const HERO_MOBILE_TOKENS: HeroToken[] = [
   {
-    src: "/assets/tokens/sol.png",
+    src: "/assets/tokens/eth.svg",
     left: "18%",
     top: "18%",
     width: "clamp(42px, 11vw, 60px)",
@@ -264,7 +264,7 @@ const HERO_MOBILE_TOKENS: HeroToken[] = [
     opacity: 0.96,
   },
   {
-    src: "/assets/tokens/bonk.png",
+    src: "/assets/tokens/usdc.png",
     left: "69%",
     top: "13%",
     width: "clamp(34px, 9vw, 50px)",
@@ -279,7 +279,7 @@ const HERO_MOBILE_TOKENS: HeroToken[] = [
     opacity: 0.88,
   },
   {
-    src: "/assets/tokens/mew.png",
+    src: "/assets/tokens/eth.svg",
     left: "10%",
     top: "41%",
     width: "clamp(28px, 7.5vw, 42px)",
@@ -294,7 +294,7 @@ const HERO_MOBILE_TOKENS: HeroToken[] = [
     opacity: 0.8,
   },
   {
-    src: "/assets/tokens/pepe.png",
+    src: "/assets/tokens/usdc.png",
     left: "78%",
     top: "39%",
     width: "clamp(26px, 7vw, 40px)",
@@ -309,7 +309,7 @@ const HERO_MOBILE_TOKENS: HeroToken[] = [
     opacity: 0.74,
   },
   {
-    src: "/assets/tokens/pengu.png",
+    src: "/assets/tokens/eth.svg",
     left: "20%",
     top: "63%",
     width: "clamp(24px, 6.5vw, 36px)",

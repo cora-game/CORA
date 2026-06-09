@@ -1,5 +1,4 @@
 import type { WsMessage, MatchResult } from '@shared/websocket';
-import { deriveMatchId } from '@shared/escrow';
 import type { Room, RoomSocket } from './types';
 import type { RoomManager } from '../RoomManager';
 import { submitSettlementTransaction } from '../../utils/settlement';
@@ -25,7 +24,7 @@ export class Lifecycle {
     console.log(`[Private] Room ${roomId} created for Player A: ${playerAPubkey}`);
     this.armDepositTimeout(room, playerAPubkey);
 
-    this.manager.blockchain.fetchWagerUsd(room);
+    this.manager.blockchain.fetchWagerEth(room);
 
     return roomId;
   }
@@ -197,9 +196,8 @@ export class Lifecycle {
         .then(async (forfeitedMatch) => {
           // Trigger on-chain settlement awarding the challenger
           if (forfeitedMatch?.opponentWallet) {
-            const matchIdBytes = deriveMatchId(room.id);
             try {
-              await submitSettlementTransaction(0, matchIdBytes, forfeitedMatch.opponentWallet);
+              await submitSettlementTransaction(0, room.matchId, forfeitedMatch.opponentWallet);
               await this.manager.blinkMatches.markCompleted(room.id);
               console.log(`[Blink] FORFEITED room ${room.id} settled on-chain. Challenger ${forfeitedMatch.opponentWallet} awarded. DB marked COMPLETED.`);
             } catch (settlementErr) {
@@ -507,20 +505,7 @@ export class Lifecycle {
     room.depositTimeouts.clear();
     this.clearAllOpenedCards(room);
 
-    // ER-authoritative surrender: send surrender_match instruction to ER
-    if (room.erEnabled && room.erSessionPda) {
-      try {
-        await this.manager.blockchain.surrenderErMatch(room, surrenderedAddress);
-        // finalizeTerminalErSession handles settlement + broadcast
-        return;
-      } catch (e) {
-        console.error(`[Surrender] ER surrender failed for room ${roomId}, falling back to engine:`, e);
-        await this.manager.blockchain.handleErFatalError(room, 'surrender', e);
-        return;
-      }
-    }
-
-    // Non-ER path: engine-only surrender
+    // Engine-only surrender: the engine emits gameOver, which runs settlement.
     if (room.engine) {
       room.engine.surrender(surrenderedAddress);
       return;

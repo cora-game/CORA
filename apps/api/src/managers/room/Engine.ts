@@ -40,15 +40,8 @@ export class Engine {
       return;
     }
 
-    const engine = new GameEngine(playersInfo, questions, { externalAuthority: room.erEnabled });
+    const engine = new GameEngine(playersInfo, questions, { externalAuthority: false });
     room.engine = engine;
-
-    // Create ER session if MagicBlock is configured
-    await this.manager.blockchain.createBattleSession(room);
-    if (this.manager.store.getRoom(room.id) !== room) {
-      engine.stop();
-      return;
-    }
     room.status = 'playing';
 
     // Wire engine events to WebSocket broadcasts
@@ -66,19 +59,6 @@ export class Engine {
         payload: data.phase,
       });
       this.manager.network.broadcastGameState(room);
-    });
-
-    engine.on('roundDeadline', async (data) => {
-      if (!room.erEnabled) return;
-      console.log(`Room ${room.id} ER round ${data.roundNumber} deadline reached. Resolving on MagicBlock.`);
-      try {
-        await this.manager.blockchain.resolveRoundDeadline(room);
-        this.manager.network.broadcastScoreUpdate(room);
-        this.manager.network.broadcastGameState(room);
-      } catch (e) {
-        console.error(`[RoomEngineManager] ER deadline resolution failed for room ${room.id}:`, e);
-        await this.manager.blockchain.handleErFatalError(room, 'round deadline resolution', e);
-      }
     });
 
     engine.on('gameOver', (data) => {
@@ -243,13 +223,6 @@ export class Engine {
     });
 
     engine.start();
-    if (room.erEnabled) {
-      try {
-        await this.manager.blockchain.syncErState(room);
-      } catch (e) {
-        console.warn(`[RoomEngineManager] Initial ER state sync failed for room ${room.id}:`, e);
-      }
-    }
     console.log(`Room ${room.id} game engine started. 5-minute countdown begins!`);
     this.startBotIfNeeded(room);
     this.manager.network.broadcastGameState(room);
@@ -342,21 +315,7 @@ export class Engine {
     console.log(`Card ${cardId} expired for player ${address} in room ${room.id} (timeout).`);
 
     this.manager.lifecycle.clearOpenedCard(room, address);
-    if (room.erEnabled) {
-      const result = room.engine.playCardNonAuthoritative(address, cardId, '__timeout__');
-      if (!result.success) return;
-
-      try {
-        // Consume slot on-chain even for timeout
-        await this.manager.blockchain.consumeErSlotEmpty(room, address, cardId);
-      } catch (e) {
-        console.error(`[RoomEngineManager] Failed to consume ER slot after timeout in room ${room.id}:`, e);
-        await this.manager.blockchain.handleErFatalError(room, 'timeout slot consumption', e);
-        return;
-      }
-    } else {
-      room.engine.playCard(address, cardId, '__timeout__');
-    }
+    room.engine.playCard(address, cardId, '__timeout__');
 
     this.sendCardExpired(room, address, cardId, 'timeout');
 
@@ -418,102 +377,39 @@ export class Engine {
 
     console.log(`Player ${address} played card ${cardId} with answer ${selectedOptionId} in room ${room.id}`);
 
-    let result: PlayCardResult;
-
-    if (room.erEnabled) {
-      const erResult = room.engine.playCardNonAuthoritative(address, cardId, selectedOptionId);
-      result = erResult;
-
-      if (!erResult.success) {
-        console.warn(`Card play failed for ${address} in room ${room.id}`);
-        return;
-      }
-
-      // === Optimistic UI: broadcast damage event BEFORE ER round-trip ===
-      if (erResult.correct) {
-        this.manager.network.broadcastToRoom(room, {
-          type: 'damageEvent',
-          payload: {
-            attackerAddress: erResult.attackerAddress,
-            targetAddress: erResult.targetAddress,
-            damage: erResult.cardType === 'attack' ? erResult.damage : erResult.heal,
-            multiplier: erResult.multiplier,
-            type: erResult.cardType,
-            timestamp: Date.now(),
-          },
-        });
-      }
-
-      // Send card result to the acting player immediately (optimistic)
-      const client = room.clients.get(address);
-      this.manager.network.safeSend(client?.ws, {
-        type: 'playCardResult',
-        payload: {
-          correct: result.correct,
-          damage: result.damage,
-          heal: result.heal,
-          multiplier: result.multiplier,
-          cardType: result.cardType,
-        },
-      });
-
-      this.manager.network.broadcastScoreUpdate(room);
-
-      // === ER confirm async — non-blocking for UI ===
-      try {
-        if (erResult.correct) {
-          const erState = await this.manager.blockchain.applyErCardEffect(room, {
-            owner: address,
-            cardId,
-            finalValue: erResult.finalValue,
-            scoreDelta: erResult.scoreDelta,
-          });
-          await this.manager.blockchain.finalizeTerminalErSession(room, erState);
-        } else {
-          // Wrong answer: consume the slot on-chain with zero effect
-          await this.manager.blockchain.consumeErSlotEmpty(room, address, cardId);
-        }
-        this.manager.network.broadcastScoreUpdate(room);
-      } catch (e) {
-        console.error(`[RoomEngineManager] ER card play failed for room ${room.id}:`, e);
-        await this.manager.blockchain.handleErFatalError(room, 'card play', e);
-        return;
-      }
-    } else {
-      result = room.engine.playCard(address, cardId, selectedOptionId);
-      if (!result.success) {
-        console.warn(`Card play failed for ${address} in room ${room.id}`);
-        return;
-      }
-
-      if (result.correct) {
-        this.manager.network.broadcastToRoom(room, {
-          type: 'damageEvent',
-          payload: {
-            attackerAddress: result.attackerAddress,
-            targetAddress: result.targetAddress,
-            damage: result.cardType === 'attack' ? result.damage : result.heal,
-            multiplier: result.multiplier,
-            type: result.cardType,
-            timestamp: Date.now(),
-          },
-        });
-      }
-
-      const client = room.clients.get(address);
-      this.manager.network.safeSend(client?.ws, {
-        type: 'playCardResult',
-        payload: {
-          correct: result.correct,
-          damage: result.damage,
-          heal: result.heal,
-          multiplier: result.multiplier,
-          cardType: result.cardType,
-        },
-      });
-
-      this.manager.network.broadcastScoreUpdate(room);
+    const result: PlayCardResult = room.engine.playCard(address, cardId, selectedOptionId);
+    if (!result.success) {
+      console.warn(`Card play failed for ${address} in room ${room.id}`);
+      return;
     }
+
+    if (result.correct) {
+      this.manager.network.broadcastToRoom(room, {
+        type: 'damageEvent',
+        payload: {
+          attackerAddress: result.attackerAddress,
+          targetAddress: result.targetAddress,
+          damage: result.cardType === 'attack' ? result.damage : result.heal,
+          multiplier: result.multiplier,
+          type: result.cardType,
+          timestamp: Date.now(),
+        },
+      });
+    }
+
+    const client = room.clients.get(address);
+    this.manager.network.safeSend(client?.ws, {
+      type: 'playCardResult',
+      payload: {
+        correct: result.correct,
+        damage: result.damage,
+        heal: result.heal,
+        multiplier: result.multiplier,
+        cardType: result.cardType,
+      },
+    });
+
+    this.manager.network.broadcastScoreUpdate(room);
 
     setTimeout(() => {
       if (room.engine && room.engine.isActive()) {

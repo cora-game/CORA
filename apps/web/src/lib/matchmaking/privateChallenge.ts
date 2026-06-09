@@ -8,8 +8,12 @@ export type PrivateChallengeStatus =
 
 export type CreatePrivateChallengeResponse = {
   roomId: string;
-  blinkUrl: string;
-  transaction: string;
+  matchId: string;
+  escrowAddress: string;
+  chainId: number;
+  token: string;
+  wagerWei: string;
+  challengeUrl: string;
   role: "playerA";
   roomType: "private";
 };
@@ -42,17 +46,15 @@ export function resolveApiBaseUrl() {
 
 export async function createPrivateChallenge({
   address,
-  tokenMint,
-  wagerAmount,
+  token,
 }: {
   address: string;
-  tokenMint: string;
-  wagerAmount: number;
+  token: string;
 }): Promise<CreatePrivateChallengeResponse> {
   const response = await fetch(`${resolveApiBaseUrl()}/match/private`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ address, tokenMint, wagerAmount }),
+    body: JSON.stringify({ address, token }),
   });
 
   const payload = (await response.json().catch(() => null)) as Partial<CreatePrivateChallengeResponse> & {
@@ -63,14 +65,18 @@ export async function createPrivateChallenge({
     throw new Error(payload?.error ?? `Private challenge creation failed (${response.status}).`);
   }
 
-  if (!payload?.roomId || !payload.blinkUrl || !payload.transaction) {
-    throw new Error("Private challenge response missing roomId, blinkUrl, or transaction.");
+  if (!payload?.roomId || !payload.escrowAddress || payload.wagerWei === undefined) {
+    throw new Error("Private challenge response missing roomId, escrowAddress, or wagerWei.");
   }
 
   return {
     roomId: payload.roomId,
-    blinkUrl: payload.blinkUrl,
-    transaction: payload.transaction,
+    matchId: payload.matchId ?? "",
+    escrowAddress: payload.escrowAddress,
+    chainId: payload.chainId ?? 84532,
+    token: payload.token ?? "ETH",
+    wagerWei: payload.wagerWei,
+    challengeUrl: payload.challengeUrl ?? "",
     role: "playerA",
     roomType: "private",
   };
@@ -79,20 +85,20 @@ export async function createPrivateChallenge({
 export async function confirmPrivateChallenge({
   roomId,
   address,
-  signature,
-  tokenMint,
-  wagerAmount,
+  txHash,
+  token,
+  wagerWei,
 }: {
   roomId: string;
   address: string;
-  signature: string;
-  tokenMint: string;
-  wagerAmount: number;
+  txHash: string;
+  token: string;
+  wagerWei: string;
 }) {
   const response = await fetch(`${resolveApiBaseUrl()}/match/private/confirm`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ roomId, address, signature, tokenMint, wagerAmount }),
+    body: JSON.stringify({ roomId, address, txHash, token, wagerAmount: wagerWei }),
   });
   const payload = (await response.json().catch(() => null)) as { status?: string; roomId?: string; error?: string } | null;
 
@@ -104,6 +110,29 @@ export async function confirmPrivateChallenge({
     roomId: payload?.roomId ?? roomId,
     status: payload?.status ?? "PENDING",
   };
+}
+
+export async function acceptPrivateChallenge({
+  roomId,
+  address,
+  txHash,
+}: {
+  roomId: string;
+  address: string;
+  txHash: string;
+}) {
+  const response = await fetch(`${resolveApiBaseUrl()}/match/private/accept`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ roomId, address, txHash }),
+  });
+  const payload = (await response.json().catch(() => null)) as { status?: string; roomId?: string; error?: string } | null;
+
+  if (!response.ok) {
+    throw new Error(payload?.error ?? `Challenge accept failed (${response.status}).`);
+  }
+
+  return { roomId: payload?.roomId ?? roomId, status: payload?.status ?? "CHALLENGED" };
 }
 
 export async function getPrivateChallenge(roomId: string, signal?: AbortSignal): Promise<PrivateChallenge> {
